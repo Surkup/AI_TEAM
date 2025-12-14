@@ -1,0 +1,44 @@
+# Temporal Workflows Configuration
+# Конфигурация для оркестрации задач через Temporal
+
+workflows:
+  # Article Writing Workflow
+  article_workflow:
+    # Killer Feature #1: Динамические итерации
+    max_iterations: 10
+    quality_threshold: 8.0  # минимальная оценка качества
+
+    # Timeouts для каждой activity (в минутах)
+    timeouts:
+      write_article_minutes: 5
+      critique_article_minutes: 3
+      fact_check_minutes: 5
+      edit_article_minutes: 3
+
+    # Retry policy для activities
+    retry_policy:
+      initial_interval: 1  # секунды
+      backoff_coefficient: 2.0
+      maximum_interval: 100  # секунды
+      maximum_attempts: 3
+
+  # Software Development Workflow (пример для будущего)
+  dev_workflow:
+    max_iterations: 5
+    quality_threshold: 9.0
+
+    timeouts:
+      design_minutes: 10
+      code_minutes: 15
+      test_minutes: 10
+      review_minutes: 5
+
+# Temporal Server подключение
+temporal:
+  host: "localhost"
+  port: 7233
+  namespace: "ai-team"
+
+  # Connection settings
+  connect_timeout: 10  # секунды
+  rpc_timeout: 30  # секунды

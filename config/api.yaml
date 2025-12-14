@@ -1,0 +1,44 @@
+# API Gateway Configuration
+# Конфигурация для REST API и FastAPI
+
+api:
+  # Server settings
+  host: "0.0.0.0"
+  port: 8000
+  debug: false  # true для development
+
+  # CORS settings
+  cors:
+    enabled: true
+    allowed_origins:
+      - "http://localhost:3000"  # Frontend dev server
+      - "http://localhost:5173"  # Vite dev server
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+    allowed_headers:
+      - "*"
+
+  # Rate Limiting (используется Redis)
+  rate_limit:
+    enabled: true
+    requests_per_window: 10  # максимум запросов
+    window_seconds: 60  # временное окно
+
+    # Разные лимиты для разных endpoints
+    endpoints:
+      "/api/v1/tasks":
+        requests_per_window: 5
+        window_seconds: 60
+      "/api/v1/status":
+        requests_per_window: 100
+        window_seconds: 60
+
+  # Request timeouts
+  request_timeout: 300  # 5 минут (для длительных задач)
+
+  # Logging
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_format: "json"  # json или text

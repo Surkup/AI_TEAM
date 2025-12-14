@@ -1,0 +1,22 @@
+# Dummy Agent Configuration
+# Конфигурация для DummyAgent (используется на Этапе 1)
+
+dummy_agent:
+  name: "dummy_agent"
+
+  # Имитация работы
+  mock_delay_seconds: 1.0  # Задержка для имитации реальной работы
+  success_rate: 1.0  # 1.0 = всегда успешно, 0.8 = 80% успешно
+
+  # Логирование
+  log_level: "DEBUG"  # DEBUG для разработки, INFO для production
+
+  # MindBus подписка
+  subscriptions:
+    - type: "COMMAND"
+      to: "dummy_agent"
+
+  # Параметры ответа
+  response:
+    default_status: "SUCCESS"
+    default_result: "Task completed successfully"

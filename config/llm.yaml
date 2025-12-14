@@ -1,0 +1,41 @@
+# LLM Configuration
+# Конфигурация для работы с LLM через LiteLLM
+
+llm:
+  # Основная модель
+  default_model: "gpt-4"
+
+  # Fallback модели (если основная недоступна)
+  fallback_models:
+    - "claude-3-opus-20240229"
+    - "gpt-3.5-turbo"
+
+  # Параметры генерации
+  temperature: 0.7
+  max_tokens: 2000
+
+  # Resilience параметры
+  timeout: 60  # секунд
+  num_retries: 3  # количество повторных попыток
+
+  # Кеширование
+  cache_ttl: 3600  # 1 час в секундах
+
+  # Модели для разных агентов (можно переопределить default_model)
+  agent_models:
+    writer: "gpt-4"
+    critic: "claude-3-opus-20240229"  # Claude лучше для критики
+    editor: "gpt-4"
+    researcher: "perplexity-online"  # Специализированная модель
+    fact_checker: "gpt-4"
+
+  # Бюджетный контроль
+  budget:
+    max_cost_per_task: 0.50  # $0.50 максимум на задачу
+    max_cost_per_day: 10.00  # $10 максимум в день
+    alert_threshold: 0.80  # Предупреждение при 80% лимита
+
+# API ключи загружаются из переменных окружения:
+# OPENAI_API_KEY
+# ANTHROPIC_API_KEY
+# PERPLEXITY_API_KEY

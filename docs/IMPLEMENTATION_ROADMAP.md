@@ -85,11 +85,19 @@
 **Функционал**:
 - Подписывается на сообщения: `type=COMMAND` и `to=dummy_agent`
 - При получении COMMAND:
-  - Ждёт 1 секунду (имитация работы)
-  - Отправляет RESULT обратно: `{"status": "SUCCESS", "result": "Done"}`
+  - Ждёт `config["dummy_agent"]["mock_delay_seconds"]` (имитация работы)
+  - Отправляет RESULT согласно SSOT схеме `Result` из `docs/SSOT/`
   - Копирует `trace_id` из входящего сообщения
 
-**Критерий готовности**: Отправили COMMAND → через 1 сек получили RESULT
+**Пример конфигурации** (`config/agents/dummy_agent.yaml`):
+```yaml
+dummy_agent:
+  name: "dummy_agent"
+  mock_delay_seconds: 1.0  # Задержка для имитации работы
+  success_rate: 1.0  # Всегда успешно для начала
+```
+
+**Критерий готовности**: Отправили COMMAND → через `mock_delay_seconds` получили RESULT
 
 **Время**: 1-2 часа
 
