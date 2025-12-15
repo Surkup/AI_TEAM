@@ -14,7 +14,7 @@ All code MUST follow these specifications.
 - ✅ **[PROCESS_CARD_SPEC_v1.0.md](PROCESS_CARD_SPEC_v1.0.md)** — спецификация карточек процессов (Process Cards)
 
 **Архивные версии**:
-- 📦 **[MESSAGE_FORMAT_v1.0.md](MESSAGE_FORMAT_v1.0.md)** — v1.0 (superseded by v1.1)
+- 📦 **[MESSAGE_FORMAT_v1.0.md](archive/MESSAGE_FORMAT_v1.0.md)** — v1.0 (superseded by v1.1.1)
 
 **Планируемые спецификации**:
 - `task_format.md` — Task structure (интеграция с Process Cards)
