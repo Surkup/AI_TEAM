@@ -1,10 +1,15 @@
-# MESSAGE FORMAT Specification v1.1
+# MESSAGE FORMAT Specification v1.1.1
 
-**Статус**: ✅ Утверждено (Final Release v1.1)
-**Версия**: 1.1
+**Статус**: ✅ Утверждено (Final Release v1.1.1)
+**Версия**: 1.1.1
 **Дата**: 2025-12-15
 **Совместимость**: MindBus Protocol v1.0, CloudEvents v1.0
 **Базируется на**: CNCF CloudEvents v1.0 (AMQP Edition) + AsyncAPI 3.0.0 concepts + gRPC error model
+
+**Изменения v1.1.1** (patch от v1.1):
+- ✅ Унификация примеров: все используют `action` (удалены остатки `command_type`)
+- ✅ Добавлена явная таблица разделения ERROR vs EVENT (критерии выбора типа)
+- ✅ Граничные случаи ERROR/EVENT зафиксированы в секции 5.1
 
 **Изменения v1.1** (от v1.0):
 - ✅ Добавлен тип `ai.team.error` (отдельный от RESULT)
@@ -68,9 +73,9 @@
   "subject": "task-555",
   "traceparent": "00-4bf9...-01",
 
-  // --- Data Field (определено в MESSAGE FORMAT v1.0) ---
+  // --- Data Field (определено в MESSAGE FORMAT v1.1) ---
   "data": {
-    "command_type": "generate_article",  // Структура определена здесь
+    "action": "generate_article",  // Структура определена здесь
     "target_node": "agent.writer.001",
     "params": {
       "topic": "AI trends 2025",
@@ -173,7 +178,7 @@ COMMAND — это поручение от Оркестратора к Аген�
   "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
 
   "data": {
-    "command_type": "generate_article",
+    "action": "generate_article",
     "params": {
       "topic": "AI trends 2025",
       "length": 2000,
@@ -204,7 +209,7 @@ routing_key='cmd.writer.any'   # Any writer agent
   "traceparent": "00-7a8b9c0d1e2f3g4h5i6j7k8l9m0n1o2p-11f167bb1ca013c8-01",
 
   "data": {
-    "command_type": "review_code",
+    "action": "review_code",
     "target_node": "agent.critic.001",
     "params": {
       "code_artifact_id": "artifact-12345",
@@ -364,7 +369,7 @@ RESULT — это ответ Агента Оркестратору после **
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
 | `status` | `enum` | **REQUIRED** | Статус выполнения: `"SUCCESS"`, `"FAILURE"`, `"TIMEOUT"`, `"CANCELLED"` |
-| `result` | `object \| null` | OPTIONAL | Результат выполнения (только при `status=SUCCESS`). Структура зависит от `command_type` |
+| `result` | `object \| null` | OPTIONAL | Результат выполнения (только при `status=SUCCESS`). Структура зависит от `action` |
 | `error` | `object \| null` | OPTIONAL | Информация об ошибке (только при `status=FAILURE`). Поля: `code` (string), `message` (string), `details` (object) |
 | `execution_time_ms` | `integer` | **REQUIRED** | Фактическое время выполнения в миллисекундах |
 | `metadata` | `object \| null` | OPTIONAL | Метаданные выполнения (model, tokens, cost, etc.) |
@@ -551,6 +556,24 @@ ERROR — это **отдельный тип сообщения** для пер�
 - System errors (системные ошибки узлов)
 - Validation errors (ошибки валидации данных)
 - Timeout errors (превышение таймаутов)
+
+**ВАЖНО: Разделение ERROR vs EVENT**
+
+Чёткое правило выбора типа сообщения:
+
+| Критерий | ERROR | EVENT |
+|----------|-------|-------|
+| **Наличие correlation_id** | ✅ Всегда связан с COMMAND через `correlation_id` | Может быть без связи (heartbeat, lifecycle) |
+| **Семантика** | Что-то пошло не так, требуется внимание | Информационное уведомление о штатном событии |
+| **Routing** | Отправляется инициатору COMMAND | Pub/Sub для всех подписчиков |
+| **Retryable** | Явно указано в `error.retryable` | N/A |
+| **Примеры** | Timeout, quota exceeded, validation failed | task_completed, node_started, heartbeat |
+
+**Граничные случаи:**
+- Системная ошибка узла (БД недоступна) → **ERROR** с `correlation_id=null`, проактивный
+- Узел успешно запустился → **EVENT** типа `node_started`
+- Heartbeat от узла → **EVENT** типа `heartbeat`
+- COMMAND не выполнен из-за недоступности ресурса → **ERROR** с `correlation_id`
 
 ### 5.2. Структура Data Field
 
@@ -1197,9 +1220,9 @@ with open("config/messaging.yaml") as f:
     messaging_config = MessagingConfig(**config_data["messaging"])
 
 # Использование в коде
-def create_command(command_type: str, params: dict) -> CommandData:
+def create_command(action: str, params: dict) -> CommandData:
     return CommandData(
-        command_type=command_type,
+        action=action,
         params=params,
         timeout_seconds=messaging_config.default_command_timeout_seconds  # Из конфига!
     )
@@ -1273,9 +1296,9 @@ steps:
 ```json
 {
   "data": {
-    "command_type": "generate_article",  // Из Process Card: command
+    "action": "generate_article",  // Из Process Card: command
     "params": {
-      "topic": "AI trends 2025"           // Из Process Card: params
+      "topic": "AI trends 2025"    // Из Process Card: params
     },
     "timeout_seconds": 300
   }
@@ -1338,7 +1361,7 @@ steps:
   "datacontenttype": "application/json",
 
   "data": {
-    "command_type": "generate_article",
+    "action": "generate_article",
     "params": {
       "topic": "AI trends 2025",
       "length": 2000
@@ -1773,5 +1796,6 @@ asyncapi validate asyncapi.yaml
 
 **Статус реализации**: Step 1.1 ✅ ЗАВЕРШЁН (100%)
 
-**Версия**: v1.1
+**Версия**: v1.1.1 (patch: унификация примеров, ERROR/EVENT разделение)
 **Последнее обновление**: 2025-12-15
+**Экспертная оценка**: 95/100 (уровень промышленного стандарта) — см. [MESSAGE_FORMAT_v1.1_REVIEW.md](../project/MESSAGE_FORMAT_v1.1_REVIEW.md)
