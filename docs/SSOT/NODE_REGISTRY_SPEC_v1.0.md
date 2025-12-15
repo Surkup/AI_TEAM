@@ -22,10 +22,10 @@
 
 ## Связанные документы (SSOT)
 
-- [mindbus_protocol_v1.md](../concepts/mindbus_protocol_v1.md) — протокол шины данных
+- [mindbus_protocol_v1.md](mindbus_protocol_v1.md) — протокол шины данных (тот же каталог SSOT)
 - [NODE_PASSPORT_SPEC_v1.0.md](NODE_PASSPORT_SPEC_v1.0.md) — спецификация паспорта узла
-- [PROCESS_CARD_SPEC.md](PROCESS_CARD_SPEC.md) — карточки процессов (будущая интеграция)
-- [READY_MADE_FIRST.md](../principles/READY_MADE_FIRST.md) — принцип готовых решений
+- [PROCESS_CARD_SPEC_v1.0.md](PROCESS_CARD_SPEC_v1.0.md) — карточки процессов (будущая интеграция)
+- [READY_MADE_FIRST.md](../project/principles/READY_MADE_FIRST.md) — принцип готовых решений
 
 ---
 

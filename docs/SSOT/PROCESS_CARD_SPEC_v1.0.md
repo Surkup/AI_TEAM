@@ -23,10 +23,10 @@
 
 ## Связанные документы (SSOT)
 
-- [mindbus_protocol_v1.md](../concepts/mindbus_protocol_v1.md) — протокол шины данных
+- [mindbus_protocol_v1.md](mindbus_protocol_v1.md) — протокол шины данных (тот же каталог SSOT)
 - [NODE_PASSPORT_SPEC_v1.0.md](NODE_PASSPORT_SPEC_v1.0.md) — спецификация паспорта узла
 - [NODE_REGISTRY_SPEC_v1.0.md](NODE_REGISTRY_SPEC_v1.0.md) — реестр узлов
-- [READY_MADE_FIRST.md](../principles/READY_MADE_FIRST.md) — принцип готовых решений
+- [READY_MADE_FIRST.md](../project/principles/READY_MADE_FIRST.md) — принцип готовых решений
 - [PROJECT_OVERVIEW.md](../../PROJECT_OVERVIEW.md) — концепция проекта
 
 ---

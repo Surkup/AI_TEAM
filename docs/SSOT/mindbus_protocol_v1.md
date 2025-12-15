@@ -23,7 +23,7 @@
 2. **Язык общения:** CloudEvents (JSON) — для совместимости данных.
 3. **Наблюдаемость:** W3C Trace Context — для сквозного мониторинга.
 
-**Обоснование выбора**: См. [docs/principles/READY_MADE_FIRST.md](../principles/READY_MADE_FIRST.md) — принцип "Готовые решения первичны"
+**Обоснование выбора**: См. [READY_MADE_FIRST.md](../project/principles/READY_MADE_FIRST.md) — принцип "Готовые решения первичны"
 
 **Альтернативы рассмотренные**: Custom IPv4-inspired protocol, gRPC, NATS, Apache Kafka
 
@@ -952,7 +952,7 @@ LOG_LEVEL=INFO
 
 **Приложение B: Связанные документы**
 
-- [docs/principles/READY_MADE_FIRST.md](../principles/READY_MADE_FIRST.md) — Обоснование выбора готовых решений
-- [docs/MINDBUS_README.md](../MINDBUS_README.md) — Концептуальная архитектура MindBus
+- [READY_MADE_FIRST.md](../project/principles/READY_MADE_FIRST.md) — Обоснование выбора готовых решений
+- [MINDBUS_README.md](../MINDBUS_README.md) — Концептуальная архитектура MindBus
 - [PROJECT_OVERVIEW.md](../../PROJECT_OVERVIEW.md) — Общая архитектура AI_TEAM
 - [CLAUDE.md](../../CLAUDE.md) — Правила разработки проекта

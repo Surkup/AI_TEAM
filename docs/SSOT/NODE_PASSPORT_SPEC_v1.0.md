@@ -1117,8 +1117,8 @@ v2.0 → Изменена структура capabilities (breaking change)
 
 ### 11.2. Связанные документы
 
-- **[READY_MADE_FIRST.md](../principles/READY_MADE_FIRST.md)** — принцип "готовые решения первичны"
-- **[mindbus_protocol_v1.md](../concepts/mindbus_protocol_v1.md)** — протокол шины данных
+- **[READY_MADE_FIRST.md](../project/principles/READY_MADE_FIRST.md)** — принцип "готовые решения первичны"
+- **[mindbus_protocol_v1.md](mindbus_protocol_v1.md)** — протокол шины данных (тот же каталог SSOT)
 - **[CLAUDE.md](../../CLAUDE.md)** — правила разработки (SSOT, Zero Hardcoding)
 - **[PROJECT_OVERVIEW.md](../../PROJECT_OVERVIEW.md)** — концепция проекта
 
