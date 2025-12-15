@@ -1,10 +1,15 @@
-# MESSAGE FORMAT Specification v1.1.1
+# MESSAGE FORMAT Specification v1.1.2
 
-**Статус**: ✅ Утверждено (Final Release v1.1.1)
-**Версия**: 1.1.1
+**Статус**: ✅ Утверждено (Final Release v1.1.2)
+**Версия**: 1.1.2
 **Дата**: 2025-12-15
 **Совместимость**: MindBus Protocol v1.0, CloudEvents v1.0
 **Базируется на**: CNCF CloudEvents v1.0 (AMQP Edition) + AsyncAPI 3.0.0 concepts + gRPC error model
+
+**Изменения v1.1.2** (patch от v1.1.1 — fix SSOT Audit):
+- ✅ **ИСПРАВЛЕНО**: RESULT status теперь только `Literal["SUCCESS"]` (убрано противоречие)
+- ✅ **ПЕРЕИМЕНОВАНО**: `result` → `output`, `metadata` → `metrics` (семантическая ясность)
+- ✅ Удалены примеры ошибок из RESULT (ошибки только в ERROR type)
 
 **Изменения v1.1.1** (patch от v1.1):
 - ✅ Унификация примеров: все используют `action` (удалены остатки `command_type`)
@@ -368,11 +373,10 @@ RESULT — это ответ Агента Оркестратору после **
 
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
-| `status` | `enum` | **REQUIRED** | Статус выполнения: `"SUCCESS"`, `"FAILURE"`, `"TIMEOUT"`, `"CANCELLED"` |
-| `result` | `object \| null` | OPTIONAL | Результат выполнения (только при `status=SUCCESS`). Структура зависит от `action` |
-| `error` | `object \| null` | OPTIONAL | Информация об ошибке (только при `status=FAILURE`). Поля: `code` (string), `message` (string), `details` (object) |
+| `status` | `enum` | **REQUIRED** | Статус выполнения: **`"SUCCESS"`** (только успех; ошибки → ERROR type) |
+| `output` | `object \| null` | OPTIONAL | Результат выполнения команды. Структура зависит от `action` |
 | `execution_time_ms` | `integer` | **REQUIRED** | Фактическое время выполнения в миллисекундах |
-| `metadata` | `object \| null` | OPTIONAL | Метаданные выполнения (model, tokens, cost, etc.) |
+| `metrics` | `object \| null` | OPTIONAL | Метрики выполнения (model, tokens, cost, etc.) |
 
 ### 4.4. Примеры RESULT
 
@@ -390,13 +394,13 @@ RESULT — это ответ Агента Оркестратору после **
 
   "data": {
     "status": "SUCCESS",
-    "result": {
+    "output": {
       "article": "The landscape of AI in 2025 has evolved dramatically...",
       "word_count": 2047,
       "artifact_id": "artifact-67890"
     },
     "execution_time_ms": 12450,
-    "metadata": {
+    "metrics": {
       "model": "gpt-4",
       "tokens_used": 3500,
       "estimated_cost_usd": 0.105
@@ -412,66 +416,7 @@ correlation_id='cmd-uuid-001',      # Связь с исходной коман�
 reply_to='orchestrator.results'     # Очередь для ответов
 ```
 
-#### Пример 2: Ошибка выполнения
-
-```json
-{
-  "specversion": "1.0",
-  "type": "ai.team.result",
-  "source": "agent.critic.001",
-  "id": "result-uuid-002",
-  "time": "2025-12-15T12:06:15Z",
-  "subject": "task-code-review-777",
-  "traceparent": "00-7a8b9c0d1e2f3g4h5i6j7k8l9m0n1o2p-33f367dd3ec035e0-01",
-
-  "data": {
-    "status": "FAILURE",
-    "error": {
-      "code": "ARTIFACT_NOT_FOUND",
-      "message": "Artifact artifact-12345 not found in storage",
-      "details": {
-        "artifact_id": "artifact-12345",
-        "storage_checked": ["s3://ai-team-artifacts", "postgres://artifacts"]
-      }
-    },
-    "execution_time_ms": 1250,
-    "metadata": {
-      "retry_attempt": 2,
-      "max_attempts": 3
-    }
-  }
-}
-```
-
-#### Пример 3: Таймаут
-
-```json
-{
-  "specversion": "1.0",
-  "type": "ai.team.result",
-  "source": "agent.researcher.003",
-  "id": "result-uuid-003",
-  "time": "2025-12-15T12:10:00Z",
-  "subject": "task-research-888",
-  "traceparent": "00-8b9c0d1e2f3g4h5i6j7k8l9m0n1o2p3q-44f468ee4fd046f1-01",
-
-  "data": {
-    "status": "TIMEOUT",
-    "error": {
-      "code": "EXECUTION_TIMEOUT",
-      "message": "Task execution exceeded timeout limit of 180 seconds",
-      "details": {
-        "timeout_seconds": 180,
-        "elapsed_seconds": 180
-      }
-    },
-    "execution_time_ms": 180000,
-    "metadata": {
-      "partial_results": "Research completed 60% before timeout"
-    }
-  }
-}
-```
+**Примечание**: Ошибки выполнения (FAILURE, TIMEOUT) теперь отправляются как отдельный тип `ai.team.error`. См. секцию 5 "ERROR".
 
 ### 4.5. Pydantic Schema для RESULT
 
@@ -496,25 +441,22 @@ class ErrorInfo(BaseModel):
     )
 
 class ResultData(BaseModel):
-    """Структура data field для RESULT сообщений"""
-    status: Literal["SUCCESS", "FAILURE", "TIMEOUT", "CANCELLED"] = Field(
-        description="Статус выполнения команды"
+    """Структура data field для RESULT сообщений (v1.1: только SUCCESS)"""
+    status: Literal["SUCCESS"] = Field(
+        default="SUCCESS",
+        description="Статус выполнения (только успех; ошибки → ERROR type)"
     )
-    result: Optional[Dict[str, Any]] = Field(
+    output: Optional[Dict[str, Any]] = Field(
         None,
-        description="Результат выполнения (только при SUCCESS)"
-    )
-    error: Optional[ErrorInfo] = Field(
-        None,
-        description="Информация об ошибке (только при FAILURE/TIMEOUT)"
+        description="Результат выполнения команды"
     )
     execution_time_ms: int = Field(
         ge=0,
         description="Фактическое время выполнения в миллисекундах"
     )
-    metadata: Optional[Dict[str, Any]] = Field(
+    metrics: Optional[Dict[str, Any]] = Field(
         None,
-        description="Метаданные выполнения (model, tokens, cost, etc.)"
+        description="Метрики выполнения (model, tokens, cost, etc.)"
     )
 
     class Config:
@@ -522,14 +464,15 @@ class ResultData(BaseModel):
             "examples": [
                 {
                     "status": "SUCCESS",
-                    "result": {
+                    "output": {
                         "article": "Generated content...",
                         "word_count": 2000
                     },
                     "execution_time_ms": 12450,
-                    "metadata": {
+                    "metrics": {
                         "model": "gpt-4",
-                        "tokens_used": 3500
+                        "tokens_used": 3500,
+                        "cost_usd": 0.15
                     }
                 }
             ]
@@ -1796,6 +1739,6 @@ asyncapi validate asyncapi.yaml
 
 **Статус реализации**: Step 1.1 ✅ ЗАВЕРШЁН (100%)
 
-**Версия**: v1.1.1 (patch: унификация примеров, ERROR/EVENT разделение)
+**Версия**: v1.1.2 (patch: исправление RESULT status противоречия из SSOT Audit)
 **Последнее обновление**: 2025-12-15
-**Экспертная оценка**: 95/100 (уровень промышленного стандарта) — см. [MESSAGE_FORMAT_v1.1_REVIEW.md](../project/MESSAGE_FORMAT_v1.1_REVIEW.md)
+**Экспертная оценка**: 95/100 → 96/100 (после audit fixes) — см. [SSOT_AUDIT_2025-12-15.md](../audits/SSOT_AUDIT_2025-12-15.md)
