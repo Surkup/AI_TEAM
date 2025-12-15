@@ -1,15 +1,12 @@
 # Configuration Management: YAML + Pydantic
 
+**Статус:** ✅ УТВЕРЖДЕНО
+**Последнее обновление:** 2025-12-15
+
+**Примечание:** Конфигурация охватывает Node Passports и Process Cards
 
 ---
 
-# ⚠️ ЧЕРНОВИК — ТРЕБУЕТ ПРОВЕРКИ ⚠️
-
-**Этот документ НЕ является финальным решением!**
-
-Требуется детальный анализ, критика и проверка перед принятием решений.
-
----
 ## Решение
 
 **Выбрано: YAML файлы + Pydantic валидация**
@@ -77,15 +74,20 @@ agents = [AgentConfig(**agent) for agent in config_data["agents"]]
 
 ```
 config/
-├── agents.yaml          # Конфигурация агентов
 ├── llm.yaml             # LLM settings
-├── mindbus.yaml         # Redis/MindBus settings
+├── mindbus.yaml         # RabbitMQ/MindBus settings
 ├── database.yaml        # PostgreSQL settings
-├── storage.yaml         # MinIO settings
-└── process_cards/       # Workflow definitions
-    ├── article.yaml
-    ├── research.yaml
-    └── social_media.yaml
+├── storage.yaml         # MinIO settings (опционально)
+├── registry.yaml        # etcd/Consul settings
+└── node_passports/      # Node Passport declarations
+    ├── writer-001.yaml
+    ├── critic-001.yaml
+    └── orchestrator.yaml
+
+process_cards/           # Process Card definitions
+├── article_creation.yaml
+├── code_generation.yaml
+└── research.yaml
 
 prompts/
 ├── writer.txt
@@ -114,32 +116,68 @@ llm:
     max_cost_per_day: 10.00
 ```
 
-### config/process_cards/article.yaml
+### process_cards/article_creation.yaml (Process Card SSOT)
 ```yaml
-process_card:
-  name: "article_creation"
-  description: "Write high-quality article"
+apiVersion: ai-team.dev/v1
+kind: ProcessCard
 
-  quality_threshold: 8.0
-  max_iterations: 10
+metadata:
+  id: "550e8400-e29b-41d4-a716-446655440000"
+  name: "article_creation"
+  version: "1.0"
+
+spec:
+  variables:
+    topic: ""
+    quality_threshold: 8.0
+    draft: ""
+    critique: {}
 
   steps:
-    - agent: "researcher"
-      task: "research_topic"
-      timeout: 300
+    - id: "step_write"
+      action: "write_article"  # ← capability name
+      params:
+        topic: ${input.topic}
+      output: draft
 
-    - agent: "writer"
-      task: "write_draft"
-      timeout: 300
+    - id: "step_critique"
+      action: "critique_article"
+      params:
+        draft: ${draft}
+      output: critique
 
-    - agent: "critic"
-      task: "critique"
-      timeout: 180
+    - id: "step_decision"
+      condition: "${critique.score} >= ${quality_threshold}"
+      then: "step_publish"
+      else: "step_write"  # Повторяем
+```
 
-    - agent: "editor"
-      task: "final_edit"
-      timeout: 180
-      condition: "quality_score >= 8.0"
+### config/node_passports/writer-001.yaml (Node Passport SSOT)
+```yaml
+apiVersion: ai-team.dev/v1
+kind: NodePassport
+
+metadata:
+  name: "writer-001"
+  namespace: "ai-team"
+  labels:
+    role: "writer"
+
+spec:
+  type: "agent"
+  capabilities:
+    - name: "write_article"
+      input_schema:
+        topic: string
+      output_schema:
+        article: string
+
+  communication:
+    mindbus_queue: "agent.writer.001"
+    mindbus_routing_key: "cmd.writer.#"
+
+  resources:
+    llm_model: "gpt-4"
 ```
 
 ---
@@ -186,5 +224,10 @@ settings = Settings()
 
 ---
 
-**Статус:** 📝 ЧЕРНОВИК (требует проверки и утверждения)
-**Последнее обновление:** 2025-12-13
+**Примечание:** Конфигурация охватывает все компоненты системы:
+- Process Cards (декларативные процессы)
+- Node Passports (паспорта узлов)
+- LLM settings, MindBus, Database, etc.
+
+**Статус:** ✅ УТВЕРЖДЕНО
+**Последнее обновление:** 2025-12-15

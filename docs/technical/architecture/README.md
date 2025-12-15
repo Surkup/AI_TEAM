@@ -81,7 +81,7 @@
 Читайте все документы последовательно + изучайте связанную документацию:
 - [../../README.md](../../README.md) — концепция проекта
 - [../../CLAUDE.md](../../CLAUDE.md) — правила разработки
-- [../MINDBUS_README.md](../MINDBUS_README.md) — детали MindBus
+- [../SSOT/mindbus_protocol_v1.md](../SSOT/mindbus_protocol_v1.md) — MindBus Protocol v1.0
 - [../../QUESTIONS.md](../../QUESTIONS.md) — открытые вопросы
 
 ---
@@ -191,9 +191,9 @@ Message:
 
 После изучения архитектуры:
 
-1. **Разработчикам**: Изучить [IMPLEMENTATION_ROADMAP.md](../../IMPLEMENTATION_ROADMAP.md) — план реализации
+1. **Разработчикам**: Изучить [IMPLEMENTATION_ROADMAP.md](../../docs/project/IMPLEMENTATION_ROADMAP.md) — план реализации
 2. **Архитекторам**: Просмотреть [QUESTIONS.md](../../QUESTIONS.md) — открытые архитектурные вопросы
-3. **Всем**: Изучить концепцию MindBus в [MINDBUS_README.md](../MINDBUS_README.md)
+3. **Всем**: Изучить спецификацию [MindBus Protocol v1.0](../SSOT/mindbus_protocol_v1.md)
 
 ---
 
@@ -201,12 +201,18 @@ Message:
 
 ### Концептуальная
 - [README.md](../../README.md) — Общая концепция проекта
-- [MINDBUS_README.md](../MINDBUS_README.md) — Концепция MindBus
+- [PROJECT_OVERVIEW.md](../../PROJECT_OVERVIEW.md) — Детальная концепция системы
 - [QUESTIONS.md](../../QUESTIONS.md) — Открытые вопросы
+
+### SSOT Спецификации
+- [MindBus Protocol v1.0](../SSOT/mindbus_protocol_v1.md) — Протокол шины данных
+- [NODE PASSPORT v1.0](../SSOT/NODE_PASSPORT_SPEC_v1.0.md) — Паспорта узлов
+- [NODE REGISTRY v1.0](../SSOT/NODE_REGISTRY_SPEC_v1.0.md) — Реестр узлов
+- [PROCESS CARD v1.0](../SSOT/PROCESS_CARD_SPEC_v1.0.md) — Карточки процессов
 
 ### Правила разработки
 - [CLAUDE.md](../../CLAUDE.md) — Правила работы над проектом
-- [IMPLEMENTATION_ROADMAP.md](../../IMPLEMENTATION_ROADMAP.md) — План реализации
+- [IMPLEMENTATION_ROADMAP.md](../project/IMPLEMENTATION_ROADMAP.md) — План реализации
 
 ### Для целевой аудитории
 - [docs/audience/](../audience/) — Описание целевой аудитории

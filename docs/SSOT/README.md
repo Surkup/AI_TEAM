@@ -6,10 +6,14 @@ All code MUST follow these specifications.
 
 ## Structure
 
-- `message_format.md` - MindBus message format (will be created in Step 1.1)
-- `task_format.md` - Task structure (will be created in Step 2.1)
-- `agent_registry.md` - Agent registration format (will be created later)
-- `process_card_format.md` - Process Card DSL (will be created in Step 4.1)
+**Утверждённые спецификации**:
+- ✅ **[NODE_PASSPORT_SPEC_v1.0.md](NODE_PASSPORT_SPEC_v1.0.md)** — спецификация паспорта узла (agent/orchestrator/component)
+- ✅ **[NODE_REGISTRY_SPEC_v1.0.md](NODE_REGISTRY_SPEC_v1.0.md)** — спецификация реестра узлов (Node Registry)
+- ✅ **[PROCESS_CARD_SPEC_v1.0.md](PROCESS_CARD_SPEC_v1.0.md)** — спецификация карточек процессов (Process Cards)
+
+**Планируемые спецификации**:
+- `message_format.md` — MindBus message format (дополнительно к [mindbus_protocol_v1.md](./mindbus_protocol_v1.md))
+- `task_format.md` — Task structure (интеграция с Process Cards)
 
 ## Rules
 

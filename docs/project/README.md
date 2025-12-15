@@ -19,15 +19,15 @@
   - Философия проекта
 
 ### План реализации
-- **[IMPLEMENTATION_ROADMAP.md](../IMPLEMENTATION_ROADMAP.md)** — пошаговый план развития проекта
+- **[IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md)** — пошаговый план развития проекта
   - Текущий этап
   - Следующие шаги
   - Дорожная карта
 
 ### Концепция ключевых компонентов
-- **[MindBus](../MINDBUS_README.md)** — детальная концепция шины данных и коммуникаций
-- **[Resilience](../principles/resilience.md)** — принципы отказоустойчивости системы
-- **[MindBus Architecture](../architecture/MINDBUS_CONCEPT.md)** — архитектурная концепция MindBus
+- **[MindBus Protocol v1.0](../SSOT/mindbus_protocol_v1.md)** — финальная спецификация протокола MindBus (AMQP + CloudEvents)
+- **[Принципы устойчивости](./principles/resilience.md)** — отказоустойчивость и самовосстановление системы
+- **[Готовые решения первичны](./principles/READY_MADE_FIRST.md)** — мета-принцип выбора технологий
 
 ---
 
@@ -73,12 +73,12 @@
 1. [PROJECT_OVERVIEW.md](../../PROJECT_OVERVIEW.md) — концепция
 2. [Архитектура](../technical/architecture/) — техническая документация
 3. [Технологический стек](../technical/stack/) — выбор технологий
-4. [IMPLEMENTATION_ROADMAP.md](../IMPLEMENTATION_ROADMAP.md) — план реализации
+4. [IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md) — план реализации
 
 ### Для разработки
 1. Изучите [CLAUDE.md](../../CLAUDE.md) — правила работы
 2. Ознакомьтесь с [SSOT](../SSOT/) — единый источник правды
-3. Следуйте [IMPLEMENTATION_ROADMAP.md](../IMPLEMENTATION_ROADMAP.md)
+3. Следуйте [IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md)
 
 ---
 

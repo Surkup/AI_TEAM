@@ -11,10 +11,10 @@
 **Статус**: ✅ Готово
 
 **Что сделано**:
-- ✅ Основная концепция системы ([README.md](../README.md))
-- ✅ Концепция MindBus ([docs/MINDBUS_README.md](MINDBUS_README.md))
-- ✅ Список вопросов для проработки ([QUESTIONS.md](../QUESTIONS.md))
-- ✅ Ключевые принципы (Observability, Resilience, Proven Architectures)
+- ✅ Основная концепция системы ([README.md](../../README.md))
+- ✅ MindBus Protocol v1.0 Final ([docs/SSOT/mindbus_protocol_v1.md](../SSOT/mindbus_protocol_v1.md))
+- ✅ Список вопросов для проработки ([QUESTIONS.md](../../QUESTIONS.md))
+- ✅ Ключевые принципы (Observability, Resilience, Ready-Made Solutions First)
 
 **Результат**: Понимание "ЧТО мы строим" и "ЗАЧЕМ"
 
