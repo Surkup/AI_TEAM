@@ -1,4 +1,6 @@
-# Сравнительная таблица конкурентов
+# Сравнительная таблица
+
+> **Примечание**: Большинство "конкурентов" в этой таблице — потенциальные модули AI_TEAM. См. [README.md](README.md) — философия мета-оркестратора.
 
 ## Прямое сравнение по ключевым параметрам
 
@@ -174,4 +176,22 @@
 
 ---
 
-**Последнее обновление**: 2025-12-13
+## Стратегия мета-оркестратора
+
+AI_TEAM может использовать **все эти инструменты** через API:
+
+| Инструмент | Роль в AI_TEAM | Детали |
+|------------|----------------|--------|
+| CrewAI | Workflow engine | [01_crewai.md](01_crewai.md) |
+| AutoGen | Conversation engine | [04_autogen.md](04_autogen.md) |
+| OpenAI API | Base LLM | [09_openai.md](09_openai.md) |
+| Claude API | Reasoning LLM | [10_anthropic.md](10_anthropic.md) |
+| Jasper | Marketing content | [07_jasper.md](07_jasper.md) |
+| Perplexity | Research agent | [08_perplexity.md](08_perplexity.md) |
+| Zapier | External actions | [12_zapier.md](12_zapier.md) |
+
+**Формула**: AI_TEAM = Orchestrator + MindBus + Любые AI через API
+
+---
+
+**Последнее обновление**: 2025-12-16

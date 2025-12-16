@@ -1,5 +1,9 @@
 # CrewAI
 
+> **Потенциальная роль в AI_TEAM**: Multi-Agent Workflow Engine / Python-based Orchestration
+
+---
+
 ## Базовая информация
 
 - **Тип**: Multi-agent AI framework
@@ -9,6 +13,39 @@
   - Open-source: бесплатно
   - CrewAI Enterprise: $25,000 - $120,000/год
 - **Веб-сайт**: crewai.com
+- **GitHub**: github.com/joaomdmoura/crewai
+- **API**: ✅ Python SDK
+
+---
+
+## API и интеграция с AI_TEAM
+
+### Доступность API: ✅ Python SDK
+
+```python
+from crewai import Agent, Task, Crew
+
+# AI_TEAM может использовать CrewAI как workflow engine
+researcher = Agent(role='Researcher', goal='Find information')
+writer = Agent(role='Writer', goal='Write content')
+crew = Crew(agents=[researcher, writer], tasks=[...])
+```
+
+### Как AI_TEAM может использовать CrewAI
+
+| Сценарий | Использование CrewAI |
+|----------|---------------------|
+| **Research Workflows** | Готовые паттерны research |
+| **Content Pipelines** | Multi-step content creation |
+| **Data Analysis** | Sequential analysis tasks |
+| **Parallel Tasks** | Concurrent agent execution |
+
+### Преимущества интеграции
+
+1. **Battle-tested patterns** — проверенные workflow паттерны
+2. **Active community** — много готовых примеров
+3. **Extensible** — можно добавлять custom tools
+4. **LLM-agnostic** — работает с любыми моделями
 
 ---
 
@@ -143,23 +180,49 @@ writer = Agent(
 
 ---
 
-## Выводы
+## Интеграционная ценность для AI_TEAM
 
-**Сильные стороны CrewAI:**
-- Мощный framework для разработчиков
-- Активное комьюнити
-- Гибкая архитектура
+### CrewAI как workflow engine
 
-**Слабые стороны CrewAI:**
-- Недоступен для бизнес-пользователей без программирования
-- Нет встроенного фокуса на итеративное улучшение качества
-- Огромный ценовой разрыв между free и enterprise
+```
+┌─────────────────────────────────────┐
+│            AI_TEAM                  │
+│         (Оркестратор)               │
+│              │                      │
+│              ▼                      │
+│     ┌────────────────┐              │
+│     │    CrewAI      │              │
+│     │   (движок)     │              │
+│     │                │              │
+│     │ • Research     │              │
+│     │ • Content      │              │
+│     │ • Analysis     │              │
+│     └────────────────┘              │
+└─────────────────────────────────────┘
+```
 
-**Позиция AI_TEAM:**
-AI_TEAM занимает нишу, которую CrewAI оставляет пустой — **business-ready решение для среднего рынка с фокусом на качество, а не на workflow automation.**
+**Когда использовать CrewAI внутри AI_TEAM:**
+- Готовые workflow паттерны
+- Python-based custom tasks
+- Multi-agent orchestration
+
+**Когда использовать нативный AI_TEAM:**
+- Business-user facing
+- Quality-focused с критиками
+- Итеративное улучшение
 
 ---
 
-**Статус**: Прямой конкурент (developer tool)
-**Уровень угрозы**: Средний (разные целевые аудитории)
-**Последнее обновление**: 2025-12-13
+## Выводы
+
+**CrewAI — мощный движок, который AI_TEAM может использовать:**
+
+1. **Не конкурент, а инструмент** — AI_TEAM использует CrewAI для workflow
+2. **Добавляем недостающее** — бизнес-интерфейс, контроль качества, итерации
+3. **Symbiosis** — CrewAI workflows + AI_TEAM UX = доступность для всех
+
+---
+
+**Статус**: Потенциальный модуль (Workflow Engine)
+**Приоритет интеграции**: Высокий (mature framework)
+**Последнее обновление**: 2025-12-16
