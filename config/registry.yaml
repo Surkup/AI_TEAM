@@ -1,0 +1,19 @@
+# Node Registry Configuration
+# Based on: docs/SSOT/NODE_REGISTRY_SPEC_v1.0.md
+
+registry:
+  # How often agents should send heartbeat (seconds)
+  # Agents must send heartbeat at least this often to be considered alive
+  heartbeat_interval_seconds: 10
+
+  # Time-to-live for node registration (seconds)
+  # Node is considered dead if no heartbeat received within this time
+  # Recommended: 3x heartbeat_interval (buffer for network delays)
+  ttl_seconds: 30
+
+  # How often to check for dead nodes (seconds)
+  cleanup_interval_seconds: 5
+
+  # Grace period before removing offline nodes from history (seconds)
+  # Set to 0 to remove immediately
+  grace_period_seconds: 60

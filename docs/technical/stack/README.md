@@ -251,11 +251,17 @@ Docker Compose (контейнеры)
 - Разные задачи: MindBus для коммуникации, Temporal для orchestration
 - Можно использовать Temporal ДЛЯ оркестратора, но НЕ ВМЕСТО MindBus
 
-### ❌ Отклонено: LangGraph/CrewAI как единственный фреймворк
-**Почему НЕТ:**
-- Фиксированные workflows
+### ❌ Отклонено: LangGraph/CrewAI как единственный СИСТЕМНЫЙ фреймворк
+**Почему НЕТ как замена архитектуре:**
 - Не совместимо с концепцией Node Passport + capability-based routing
-- Мы используем custom узлы с единым интерфейсом
+- Не заменяет MindBus, Registry, Orchestrator
+- Мы используем свою архитектуру узлов с единым интерфейсом
+
+**НО:** ✅ Используем LangGraph ВНУТРИ агентов:
+- LangGraph для Agent Loop (ReAct паттерн)
+- CrewAI для командной работы агентов (опционально)
+- LiteLLM для LLM вызовов
+- См: [AGENT_ARCHITECTURE_draft.md](../../concepts/AGENT_ARCHITECTURE_draft.md)
 
 ---
 
@@ -303,4 +309,4 @@ Docker Compose (контейнеры)
 ---
 
 **Статус:** ✅ УТВЕРЖДЕНО
-**Последнее обновление**: 2025-12-15
+**Последнее обновление**: 2025-12-17

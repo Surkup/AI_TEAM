@@ -1,0 +1,294 @@
+# Creative Project Process Card
+# Универсальная карточка для творческих проектов команды AI_TEAM
+#
+# Применение:
+# - Сценарии фильмов/сериалов
+# - Бизнес-планы и стартап-идеи
+# - Сюжеты книг
+# - Концепции продуктов
+# - Маркетинговые стратегии
+#
+# Команда:
+# 🔍 Исследователь → 💡 Генератор идей → ✍️ Автор (Пушкин) → 🎯 Критик → ✨ Редактор
+#
+# See: docs/SSOT/PROCESS_CARD_SPEC_v1.0.md
+
+name: "creative_project"
+version: "1.0.0"
+description: "Универсальный процесс для творческих проектов: от идеи до финального текста"
+
+# Метаданные для UI и отчётов
+metadata:
+  display_name: "Творческий проект"
+  category: "creative"
+  estimated_time_minutes: 15
+  team_size: 5
+  tags:
+    - creative
+    - writing
+    - ideation
+    - business
+
+# Входные параметры (что задаёт пользователь)
+input:
+  project_type:
+    type: "string"
+    required: true
+    description: "Тип проекта"
+    enum:
+      - "scenario"        # Сценарий фильма/сериала
+      - "business_plan"   # Бизнес-план
+      - "book_plot"       # Сюжет книги
+      - "product_concept" # Концепция продукта
+      - "marketing"       # Маркетинговая стратегия
+      - "custom"          # Произвольный
+
+  topic:
+    type: "string"
+    required: true
+    description: "Тема/идея проекта"
+
+  target_audience:
+    type: "string"
+    required: false
+    description: "Целевая аудитория"
+
+  constraints:
+    type: "string"
+    required: false
+    description: "Ограничения и требования"
+
+  output_format:
+    type: "string"
+    required: false
+    default: "detailed"
+    enum: ["brief", "detailed", "full"]
+    description: "Детализация результата"
+
+# Шаги процесса
+steps:
+  # ============================================
+  # ШАГ 1: Исследование
+  # ============================================
+  - id: "research"
+    name: "Исследование темы"
+    description: "Исследователь собирает информацию: рынок, конкуренты, примеры, тренды"
+
+    capability: "research_topic"
+    agent_role: "researcher"
+
+    input:
+      topic: "{{input.topic}}"
+      depth: "medium"
+      focus_areas:
+        - "market_overview"
+        - "competitors"
+        - "trends"
+        - "audience"
+        - "success_examples"
+
+    timeout_seconds: 180
+    retry:
+      max_attempts: 2
+      backoff_seconds: 10
+
+    output:
+      research_data: "Результаты исследования"
+
+  # ============================================
+  # ШАГ 2: Генерация идей
+  # ============================================
+  - id: "ideation"
+    name: "Генерация концепций"
+    description: "Генератор идей создаёт варианты концепций на основе исследования"
+
+    capability: "generate_ideas"
+    agent_role: "ideator"
+
+    depends_on:
+      - "research"
+
+    input:
+      topic: "{{input.topic}}"
+      context: "{{steps.research.output.research_data}}"
+      count: 3
+      style: "diverse"
+
+    timeout_seconds: 120
+
+    output:
+      ideas: "Список концепций"
+
+  # ============================================
+  # ШАГ 3: Оценка идей Критиком
+  # ============================================
+  - id: "idea_evaluation"
+    name: "Оценка концепций"
+    description: "Критик оценивает идеи и выбирает лучшую"
+
+    capability: "compare_options"
+    agent_role: "critic"
+
+    depends_on:
+      - "ideation"
+
+    input:
+      options: "{{steps.ideation.output.ideas}}"
+      criteria:
+        - "originality"
+        - "feasibility"
+        - "market_fit"
+        - "audience_appeal"
+
+    timeout_seconds: 90
+
+    output:
+      selected_idea: "Выбранная концепция"
+      evaluation: "Обоснование выбора"
+
+  # ============================================
+  # ШАГ 4: Создание контента Автором
+  # ============================================
+  - id: "content_creation"
+    name: "Создание контента"
+    description: "Автор (Пушкин) создаёт детальный контент на основе выбранной концепции"
+
+    capability: "write_article"
+    agent_role: "writer"
+
+    depends_on:
+      - "idea_evaluation"
+
+    input:
+      topic: "{{steps.idea_evaluation.output.selected_idea}}"
+      style: "creative"
+      context:
+        research: "{{steps.research.output.research_data}}"
+        evaluation: "{{steps.idea_evaluation.output.evaluation}}"
+        project_type: "{{input.project_type}}"
+        audience: "{{input.target_audience}}"
+
+    timeout_seconds: 300
+
+    output:
+      draft: "Черновик контента"
+
+  # ============================================
+  # ШАГ 5: Критика контента
+  # ============================================
+  - id: "content_review"
+    name: "Оценка контента"
+    description: "Критик оценивает качество созданного контента"
+
+    capability: "review_content"
+    agent_role: "critic"
+
+    depends_on:
+      - "content_creation"
+
+    input:
+      content: "{{steps.content_creation.output.draft}}"
+      context: "Проект типа '{{input.project_type}}' для аудитории '{{input.target_audience}}'"
+      criteria:
+        - "clarity"
+        - "structure"
+        - "engagement"
+        - "completeness"
+        - "originality"
+
+    timeout_seconds: 90
+
+    output:
+      feedback: "Обратная связь"
+      score: "Оценка качества"
+      verdict: "ПРИНЯТО / ДОРАБОТАТЬ"
+
+  # ============================================
+  # ШАГ 6: Редактирование (условный)
+  # ============================================
+  - id: "editing"
+    name: "Редактирование"
+    description: "Редактор улучшает контент на основе обратной связи"
+
+    capability: "edit_content"
+    agent_role: "editor"
+
+    depends_on:
+      - "content_review"
+
+    # Выполняется ВСЕГДА — редактор улучшает даже хороший текст
+    # (раньше было: condition: "{{steps.content_review.output.verdict}} == 'ДОРАБОТАТЬ'")
+
+    input:
+      content: "{{steps.content_creation.output.draft}}"
+      feedback: "{{steps.content_review.output.feedback}}"
+      preserve_voice: true
+
+    timeout_seconds: 180
+
+    output:
+      edited_content: "Отредактированный контент"
+
+  # ============================================
+  # ШАГ 7: Финальная проверка
+  # ============================================
+  - id: "final_review"
+    name: "Финальная проверка"
+    description: "Критик даёт финальную оценку"
+
+    capability: "review_content"
+    agent_role: "critic"
+
+    depends_on:
+      - "editing"
+
+    input:
+      content: "{{steps.editing.output.edited_content}}"
+      context: "Финальная проверка перед публикацией"
+
+    timeout_seconds: 60
+
+    output:
+      final_score: "Финальная оценка"
+      ready_for_publish: "Готово к публикации (true/false)"
+
+# Выходные данные процесса
+output:
+  final_content: "{{steps.editing.output.edited_content}}"
+  research_summary: "{{steps.research.output.research_data}}"
+  selected_concept: "{{steps.idea_evaluation.output.selected_idea}}"
+  quality_score: "{{steps.final_review.output.final_score}}"
+  process_metrics:
+    steps_completed: 7
+    agents_involved:
+      - "Исследователь"
+      - "Генератор идей"
+      - "Автор (Пушкин)"
+      - "Критик"
+      - "Редактор"
+
+# Обработка ошибок
+error_handling:
+  on_step_failure:
+    - action: "retry"
+      max_attempts: 2
+    - action: "notify"
+      message: "Шаг {{step.name}} завершился с ошибкой"
+    - action: "escalate"
+      to: "human"
+
+  on_timeout:
+    action: "abort"
+    message: "Процесс превысил лимит времени"
+
+  on_quality_failure:
+    condition: "{{steps.final_review.output.final_score}} < 6"
+    action: "iterate"
+    max_iterations: 2
+    restart_from: "content_creation"
+
+# Лимиты ресурсов
+limits:
+  max_total_time_seconds: 900  # 15 минут
+  max_cost_usd: 2.00
+  max_iterations: 3

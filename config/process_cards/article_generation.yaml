@@ -1,0 +1,86 @@
+# Article Generation Process Card
+# Multi-step process: research → write → review → publish
+#
+# This card demonstrates:
+# - Sequential steps
+# - Variable passing between steps
+# - Conditional branching
+# - Retry policy
+
+metadata:
+  id: "card-article-001"
+  name: "article_generation"
+  version: "1.0"
+  description: "Generate article with research, writing, and review"
+  author: "ai_team"
+
+spec:
+  variables:
+    topic: ""
+    research_data: null
+    article_text: ""
+    review_result: null
+
+  steps:
+    # Step 1: Research the topic
+    - id: "step_research"
+      action: "research"
+      params:
+        topic: ${input.topic}
+        depth: "detailed"
+      output: research_data
+      timeout_seconds: 180
+      retry:
+        max_attempts: 2
+        delay_seconds: 5
+        on_failure: "abort"
+
+    # Step 2: Write the article
+    - id: "step_write"
+      action: "generate_text"
+      params:
+        prompt: "Write an article about: ${input.topic}\n\nBased on research: ${research_data}"
+        max_tokens: 2000
+        style: "professional"
+      output: article_text
+      timeout_seconds: 300
+
+    # Step 3: Review the article
+    - id: "step_review"
+      action: "review_text"
+      params:
+        text: ${article_text}
+        criteria:
+          - "grammar"
+          - "relevance"
+          - "readability"
+      output: review_result
+      timeout_seconds: 120
+
+    # Step 4: Decision based on review
+    - id: "step_decision"
+      condition: "${review_result.score} >= 7"
+      then: "step_save"
+      else: "step_improve"
+
+    # Step 5a: Improve if score is low
+    - id: "step_improve"
+      action: "improve_text"
+      params:
+        text: ${article_text}
+        feedback: ${review_result.feedback}
+      output: article_text
+      next: "step_review"  # Loop back to review
+
+    # Step 5b: Save to storage
+    - id: "step_save"
+      action: "file_storage"
+      params:
+        path: "/articles/${input.topic}.txt"
+        content: ${article_text}
+
+    # Step 6: Complete
+    - id: "step_complete"
+      type: "complete"
+      status: "success"
+      result: ${article_text}

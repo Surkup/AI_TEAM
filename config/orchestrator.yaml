@@ -1,0 +1,37 @@
+# Orchestrator Configuration
+# The "brain" of AI_TEAM
+# See: docs/SSOT/PROCESS_CARD_SPEC_v1.0.md
+
+orchestrator:
+  name: "orchestrator-01"
+  type: "orchestrator"
+  version: "1.0.0"
+
+  # Capabilities (what this orchestrator can do)
+  capabilities:
+    - "process_execution"
+    - "task_routing"
+
+  # Process execution limits
+  process_limits:
+    max_execution_time_seconds: 3600   # 1 hour max per process
+    step_timeout_seconds: 300          # 5 minutes per step
+    max_retries_per_step: 3            # Max retries before failure
+    max_steps_per_process: 100         # Max steps in a process
+    max_variable_size_bytes: 10485760  # 10 MB max per variable
+
+  # Agent selection strategy
+  agent_selection:
+    strategy: "first_available"  # first_available, round_robin, least_loaded
+    # TODO: Add more sophisticated selection in v2
+
+  # Logging
+  log_level: "INFO"
+
+  # Node Registry
+  registry:
+    enabled: true
+    heartbeat_interval_seconds: 10
+
+  # Process Cards directory
+  process_cards_dir: "config/process_cards"

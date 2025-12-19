@@ -1,0 +1,41 @@
+# Storage Service Configuration
+# In-memory storage service for AI_TEAM
+# See: docs/project/IMPLEMENTATION_ROADMAP.md Step 2.0.1
+#
+# TODO: This is TEMPORARY in-memory storage.
+#       Future: Add backend configuration (s3, minio, disk)
+
+storage_service:
+  name: "storage-inmemory-01"
+  type: "storage"
+
+  # Capabilities (what this service can do)
+  capabilities:
+    - "file_storage"
+    - "artifact_storage"
+
+  # Storage limits
+  storage:
+    max_file_size_bytes: 10485760  # 10 MB
+    max_files: 10000
+
+    # TODO: Future persistent backend config
+    # backend: "s3"
+    # s3:
+    #   bucket: "ai-team-storage"
+    #   region: "us-east-1"
+
+  # Endpoint configuration
+  endpoint:
+    protocol: "amqp"
+    # For HTTP endpoint (future):
+    # protocol: "http"
+    # url: "http://localhost:8080"
+
+  # Logging
+  log_level: "INFO"
+
+  # Node Registry
+  registry:
+    enabled: true
+    heartbeat_interval_seconds: 10

@@ -288,7 +288,7 @@ capability.api.openai: "true"          # Имеет доступ к OpenAI API
   "protocol": "amqp",
   "queue": "ai-agent-coder-01.tasks",
   "replyQueue": "ai-agent-coder-01.replies",
-  "exchangeName": "mindbus.tasks",
+  "exchangeName": "mindbus.main",
   "routingKey": "agent.coder.01"
 }
 ```
@@ -572,9 +572,9 @@ matching_nodes = registry.find_nodes(selector)
    ↓
 2. [Создаёт свой NODE PASSPORT]
    ↓
-3. [Публикует CloudEvent: node.registered]
-   → MindBus Exchange: "mindbus.registry"
-   → Registry Service получает паспорт
+3. [Регистрирует паспорт в Registry]
+   → HTTP/gRPC API или etcd/Consul
+   → Registry Service сохраняет паспорт
    ↓
 4. [Registry сохраняет паспорт]
    → Валидация схемы
@@ -616,10 +616,12 @@ matching_nodes = registry.find_nodes(selector)
 }
 ```
 
-**Публикация**:
-- Exchange: `mindbus.registry`
-- Routing Key: `node.registered`
+**Альтернатива через MindBus** (если используется EVENT-based регистрация):
+- Exchange: `mindbus.main`
+- Routing Key: `evt.registry.node_registered`
 - Queue: `registry.events` (подписка Registry Service)
+
+**Рекомендуемый вариант**: Прямая регистрация через HTTP/gRPC API или etcd/Consul (см. NODE_REGISTRY_SPEC)
 
 ### 5.3. Обновление паспорта
 
@@ -707,24 +709,26 @@ matching_nodes = registry.find_nodes(selector)
 5. Удаление мёртвых узлов (Lease expired)
 6. Поиск узлов по селекторам (Capability Matching API)
 
-**Exchanges и Queues**:
+**Exchanges и Queues** (если используется EVENT-based подход):
 
 ```yaml
-# Registry получает события
-Exchange: mindbus.registry
+# Registry получает события (через единый exchange)
+Exchange: mindbus.main
 Queue: registry.events
 Bindings:
-  - routing_key: "node.registered"
-  - routing_key: "node.*.updated"
-  - routing_key: "node.lease.renewed"
-  - routing_key: "node.deregistered"
+  - routing_key: "evt.registry.node_registered"
+  - routing_key: "evt.registry.node_updated"
+  - routing_key: "evt.registry.node_deregistered"
+  - routing_key: "evt.node.heartbeat"
 
-# Registry публикует подтверждения
-Exchange: mindbus.registry
+# Registry публикует события (Pub/Sub)
+Exchange: mindbus.main
 Routing keys:
-  - "node.registered.ack"
-  - "node.updated.ack"
+  - "evt.registry.node_registered_ack"
+  - "evt.registry.node_updated_ack"
 ```
+
+**Рекомендуемый вариант**: Прямая регистрация через etcd/Consul API (см. NODE_REGISTRY_SPEC v1.0.1)
 
 ### 6.2. Orchestrator → Registry: Поиск узла
 

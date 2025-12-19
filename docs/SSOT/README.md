@@ -12,6 +12,7 @@ All code MUST follow these specifications.
 - ✅ **[NODE_PASSPORT_SPEC_v1.0.md](NODE_PASSPORT_SPEC_v1.0.md)** — спецификация паспорта узла (agent/orchestrator/component)
 - ✅ **[NODE_REGISTRY_SPEC_v1.0.md](NODE_REGISTRY_SPEC_v1.0.md)** — спецификация реестра узлов (Node Registry)
 - ✅ **[PROCESS_CARD_SPEC_v1.0.md](PROCESS_CARD_SPEC_v1.0.md)** — спецификация карточек процессов (Process Cards)
+- ✅ **[AGENT_SPEC_v1.0.md](AGENT_SPEC_v1.0.md)** — спецификация AI-агента (Brain, Tools, Memory, Capabilities)
 
 **Архивные версии**:
 - 📦 **[MESSAGE_FORMAT_v1.0.md](archive/MESSAGE_FORMAT_v1.0.md)** — v1.0 (superseded by v1.1.1)

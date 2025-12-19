@@ -1,9 +1,14 @@
 # MINDBUS Protocol v1.0 (AMQP Edition)
 
-**Статус документа:** ✅ Утверждено (Final Release v1.0)
-**Дата:** 15.12.2025
+**Статус документа:** ✅ Утверждено (Final Release v1.0.1)
+**Дата:** 17.12.2025
 **Технологический стек:** RabbitMQ (AMQP 0-9-1) + CloudEvents (JSON)
 **Принцип:** Convention over Configuration
+
+**Changelog v1.0.1** (2025-12-17):
+- **ИСПРАВЛЕНО**: EVENT routing key теперь описывает "о чём" событие (`evt.{topic}.{event_type}`), а не "от кого"
+- **УТОЧНЕНО**: Поле `source` в CloudEvents содержит информацию об отправителе
+- **ДОБАВЛЕНЫ**: Примеры использования нового формата EVENT routing keys
 
 ---
 
@@ -64,14 +69,26 @@ channel.queue_declare(
 
 ## 2.2. Адресация (Routing Keys)
 
-Используется 3-х частный ключ: `type.target.id`
+Используется 3-х частный ключ: `type.topic.action`
 
 | Тип | Шаблон ключа | Пример | Назначение |
 |-----|--------------|--------|------------|
 | **COMMAND** | `cmd.{role}.{agent_id}` | `cmd.writer.any` | Поручение работы. |
-| **EVENT** | `evt.{source}.{status}` | `evt.task.failed` | Событие (Pub/Sub). |
+| **EVENT** | `evt.{topic}.{event_type}` | `evt.task.completed` | Событие (Pub/Sub). |
 | **CONTROL** | `ctl.{target}.{scope}` | `ctl.all.stop` | Управляющий сигнал. |
 | **RESULT** | *(Reply-To Queue)* | *amq.gen-X...* | Адрес возврата (RPC). |
+
+**Философия EVENT routing keys**:
+- Routing key описывает **"о чём"** событие (тема), а НЕ "от кого" (источник)
+- Источник события указывается в CloudEvents поле `source`
+- Это позволяет подписчикам фильтровать по теме, а не по отправителю
+
+**Примеры EVENT routing keys**:
+- `evt.registry.node_registered` — о регистрации узла в реестре
+- `evt.task.completed` — о завершении задачи
+- `evt.task.failed` — об ошибке задачи
+- `evt.process.started` — о запуске процесса
+- `evt.agent.heartbeat` — о heartbeat агента
 
 **Допустимые значения `{scope}` для CONTROL:**
 
@@ -83,13 +100,24 @@ channel.queue_declare(
 
 **Примеры routing keys**:
 ```
-cmd.writer.any          # Команда любому writer агенту
-cmd.writer.writer-001   # Команда конкретному агенту
-evt.orchestrator.started # Событие: оркестратор запустился
-evt.task.completed      # Событие: задача завершена
-ctl.all.stop            # Управление: СТОП всем агентам
-ctl.writer.pause        # Управление: пауза для всех writer
+cmd.writer.any              # Команда любому writer агенту
+cmd.writer.writer-001       # Команда конкретному агенту
+evt.registry.node_registered # Событие: узел зарегистрирован
+evt.task.completed          # Событие: задача завершена
+evt.task.failed             # Событие: задача провалилась
+ctl.all.stop                # Управление: СТОП всем агентам
+ctl.writer.pause            # Управление: пауза для всех writer
 ```
+
+**ВАЖНО**: Поле "от кого" НЕ теряется! Оно указывается в CloudEvents `source`:
+```json
+{
+  "type": "ai.team.event",
+  "source": "agent.writer.001",  // ← КТО отправил
+  "data": { "task_id": "task-123" }
+}
+```
+Routing key `evt.task.completed` говорит О ЧЁМ событие, `source` говорит ОТ КОГО.
 
 ## 2.3. Формат Данных (Data Plane)
 
@@ -432,13 +460,20 @@ channel.start_consuming()
 ## 3.3. Пример: Отправка EVENT
 
 ```python
-def send_event(source: str, status: str, event_data: dict):
-    """Публикация события в систему"""
+def send_event(source: str, topic: str, event_type: str, event_data: dict):
+    """Публикация события в систему
+
+    Args:
+        source: КТО отправляет (CloudEvents source) — например 'agent.writer.001'
+        topic: О ЧЁМ событие (routing key topic) — например 'task', 'registry'
+        event_type: ТИП события — например 'completed', 'failed', 'node_registered'
+        event_data: данные события
+    """
 
     cloud_event = {
         "specversion": "1.0",
         "type": "ai.team.event",
-        "source": source,
+        "source": source,              # КТО отправил (для аудита и трассировки)
         "id": str(uuid.uuid4()),
         "time": datetime.utcnow().isoformat() + "Z",
         "data": event_data
@@ -450,7 +485,8 @@ def send_event(source: str, status: str, event_data: dict):
         content_type='application/json'
     )
 
-    routing_key = f"evt.{source}.{status}"
+    # Routing key описывает О ЧЁМ событие (тема + тип)
+    routing_key = f"evt.{topic}.{event_type}"
 
     channel.basic_publish(
         exchange='mindbus.main',
@@ -459,12 +495,24 @@ def send_event(source: str, status: str, event_data: dict):
         properties=properties
     )
 
-# Использование
+# Использование: агент сообщает о завершении задачи
 send_event(
-    source='orchestrator',
-    status='task_completed',
+    source='agent.writer.001',        # КТО отправил
+    topic='task',                     # О ЧЁМ (тема)
+    event_type='completed',           # ТИП события
     event_data={'task_id': 'task-123', 'duration': 45}
 )
+# → routing_key = 'evt.task.completed'
+# → source в JSON = 'agent.writer.001'
+
+# Использование: агент сообщает о регистрации
+send_event(
+    source='agent.writer.001',
+    topic='registry',
+    event_type='node_registered',
+    event_data={'node_uid': 'uid-123', 'capabilities': ['write_article']}
+)
+# → routing_key = 'evt.registry.node_registered'
 ```
 
 ---

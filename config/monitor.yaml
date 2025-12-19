@@ -1,0 +1,19 @@
+# Monitor Configuration
+# See: docs/project/IMPLEMENTATION_ROADMAP.md Step 1.3
+
+monitor:
+  # File logging (JSON Lines format)
+  log_to_file: false
+  log_file_path: "logs/monitor.jsonl"
+
+  # Display options
+  show_message_body: true    # Show full message data
+  show_trace_id: true        # Show W3C trace context
+  compact_mode: false        # Compact single-line output
+
+  # Color scheme (from IMPLEMENTATION_ROADMAP):
+  # - COMMAND: blue
+  # - RESULT: green
+  # - ERROR: red
+  # - EVENT: yellow
+  # - CONTROL: magenta/purple

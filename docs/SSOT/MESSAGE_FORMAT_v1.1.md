@@ -1,10 +1,18 @@
-# MESSAGE FORMAT Specification v1.1.2
+# MESSAGE FORMAT Specification v1.1.4
 
-**Статус**: ✅ Утверждено (Final Release v1.1.2)
-**Версия**: 1.1.2
-**Дата**: 2025-12-15
-**Совместимость**: MindBus Protocol v1.0, CloudEvents v1.0
+**Статус**: ✅ Утверждено (Final Release v1.1.4)
+**Версия**: 1.1.4
+**Дата**: 2025-12-18
+**Совместимость**: MindBus Protocol v1.0.1, CloudEvents v1.0
 **Базируется на**: CNCF CloudEvents v1.0 (AMQP Edition) + AsyncAPI 3.0.0 concepts + gRPC error model
+
+**Изменения v1.1.3** (patch от v1.1.2 — по результатам архитектурного аудита коллег):
+- ✅ **ИСПРАВЛЕНО**: Пример в секции 7.3 — теперь использует `ai.team.error` вместо `ResultData(status="FAILURE")`
+- ✅ **ДОБАВЛЕНО**: Правило адресации `target_node` vs `routing_key` (секция 3.3)
+- ✅ **ДОБАВЛЕНО**: КРИТИЧЕСКОЕ ПРАВИЛО — Agent НИКОГДА не делает retry самостоятельно (секция 12.2)
+- ✅ **ИСПРАВЛЕНО**: Legacy пример в Приложении A — `result`/`metadata` → `output`/`metrics`
+- ✅ **ИСПРАВЛЕНО**: Все примеры RESULT/ERROR используют RPC reply-to pattern
+- ✅ **ИСПРАВЛЕНО**: EVENT routing keys — `evt.{topic}.{event_type}` (не `evt.{source}.*`)
 
 **Изменения v1.1.2** (patch от v1.1.1 — fix SSOT Audit):
 - ✅ **ИСПРАВЛЕНО**: RESULT status теперь только `Literal["SUCCESS"]` (убрано противоречие)
@@ -157,6 +165,15 @@ COMMAND — это поручение от Оркестратора к Аген�
 ```
 
 ### 3.3. Поля COMMAND
+
+**ПРАВИЛО АДРЕСАЦИИ (v1.1.3):**
+
+> `routing_key` (AMQP) определяет **кандидатов доставки** — какие очереди получат сообщение.
+>
+> `data.target_node` (если указан) — **логическое ограничение**, проверяемое агентом или оркестратором.
+>
+> RabbitMQ **НЕ фильтрует** по `target_node` — это поле в JSON payload.
+> Агент ДОЛЖЕН проверить: если `target_node` указан и не совпадает с его ID → NACK сообщение.
 
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
@@ -594,11 +611,13 @@ ERROR — это **отдельный тип сообщения** для пер�
 }
 ```
 
-**AMQP Properties**:
+**AMQP Properties** (RPC reply-to pattern):
 ```python
 priority=20,
 correlation_id='cmd-uuid-001',  # Связь с COMMAND
-routing_key='orchestrator.errors'
+# ERROR отправляется напрямую в reply_to очередь через default exchange
+exchange='',                     # Default exchange
+routing_key=reply_to_queue       # Очередь из COMMAND.reply_to (например, 'amq.gen-XY...')
 ```
 
 #### Пример 2: Quota exceeded
@@ -726,6 +745,7 @@ EVENT — это уведомление о событии в системе (Pub
 
 **Примеры событий**:
 - `task.created` — создана новая задача
+- `task.progress` — периодический отчёт о выполнении задачи (v1.1.4 NEW)
 - `task.completed` — задача завершена
 - `node.registered` — узел зарегистрирован
 - `node.heartbeat` — heartbeat от узла
@@ -785,7 +805,7 @@ EVENT — это уведомление о событии в системе (Pub
 **AMQP Properties**:
 ```python
 priority=10,                        # Low priority for events
-routing_key='evt.orchestrator.task_completed'
+routing_key='evt.task.completed'    # Формат: evt.{topic}.{event_type}
 ```
 
 #### Пример 2: Событие ошибки системы
@@ -818,7 +838,7 @@ routing_key='evt.orchestrator.task_completed'
 **AMQP Properties**:
 ```python
 priority=10,
-routing_key='evt.agent.error'
+routing_key='evt.node.error'        # Формат: evt.{topic}.{event_type}
 ```
 
 #### Пример 3: Heartbeat события
@@ -856,6 +876,57 @@ routing_key='evt.agent.error'
 priority=5,                         # Very low priority for heartbeats
 routing_key='evt.agent.heartbeat'
 ```
+
+#### Пример 4: Task Progress события (v1.1.4 NEW)
+
+**Назначение**: Агент периодически сообщает о прогрессе выполнения задачи. Это позволяет:
+- Отличить "работает долго" от "завис"
+- Показать elapsed time в UI
+- Реализовать адаптивный timeout (пока heartbeat приходит — ждём)
+
+```json
+{
+  "specversion": "1.0",
+  "type": "ai.team.event",
+  "source": "agent.writer.001",
+  "id": "event-uuid-004",
+  "time": "2025-12-18T14:30:45Z",
+  "subject": "task-article-555",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-88h882ii8ki180k6-01",
+
+  "data": {
+    "event_type": "task.progress",
+    "event_data": {
+      "task_id": "cmd-uuid-001",
+      "state": "working",
+      "elapsed_seconds": 45,
+      "phase": "generating"
+    },
+    "severity": "INFO",
+    "tags": ["task", "progress", "working"]
+  }
+}
+```
+
+**Поля event_data для task.progress**:
+
+| Поле | Тип | Обязательность | Описание |
+|------|-----|----------------|----------|
+| `task_id` | `string` | **REQUIRED** | ID задачи (correlation_id из COMMAND) |
+| `state` | `string` | **REQUIRED** | Состояние: `"working"` (в процессе) |
+| `elapsed_seconds` | `integer` | **REQUIRED** | Сколько секунд агент уже работает над задачей |
+| `phase` | `string` | OPTIONAL | Фаза работы агента (для UI): `"understanding"`, `"planning"`, `"generating"`, `"reviewing"` |
+
+**AMQP Properties**:
+```python
+priority=5,                         # Low priority (как heartbeat)
+routing_key='evt.task.progress'
+```
+
+**Логика обработки на стороне Monitor/Orchestrator**:
+- Если `task.progress` приходит — агент жив и работает
+- Если `task.progress` НЕ приходит 2-3 интервала — агент завис
+- Адаптивный timeout: `последний_progress + grace_period`
 
 ### 5.5. Pydantic Schema для EVENT
 
@@ -1074,14 +1145,17 @@ def validate_and_process_message(cloud_event: dict, channel, method):
 ### 7.3. Пример отправки ERROR response
 
 ```python
-def send_validation_error_response(original_message: dict, validation_errors: list):
-    """Отправить ERROR response при ошибке валидации"""
+def send_validation_error_response(original_message: dict, validation_errors: list, reply_to: str):
+    """Отправить ERROR response при ошибке валидации.
 
-    error_result = ResultData(
-        status="FAILURE",
+    v1.1.3: Используем ai.team.error (не ai.team.result с FAILURE!)
+    """
+
+    error_data = ErrorData(
         error=ErrorInfo(
-            code="VALIDATION_ERROR",
+            code="INVALID_ARGUMENT",  # google.rpc.Code
             message="Message data does not match SSOT schema",
+            retryable=False,  # Validation errors не retryable
             details={
                 "original_message_id": original_message.get("id"),
                 "validation_errors": validation_errors
@@ -1092,17 +1166,25 @@ def send_validation_error_response(original_message: dict, validation_errors: li
 
     error_event = {
         "specversion": "1.0",
-        "type": "ai.team.result",
+        "type": "ai.team.error",  # НЕ ai.team.result!
         "source": "agent.validator",
         "id": str(uuid.uuid4()),
         "time": datetime.utcnow().isoformat() + "Z",
         "subject": original_message.get("subject"),
         "traceparent": original_message.get("traceparent"),
-        "data": error_result.model_dump()
+        "data": error_data.model_dump()
     }
 
-    # Отправка в MindBus
-    publish_message(error_event, priority=20)
+    # Отправка через RPC reply-to pattern (напрямую в очередь)
+    channel.basic_publish(
+        exchange='',  # Default exchange
+        routing_key=reply_to,  # Очередь из COMMAND.reply_to
+        body=json.dumps(error_event),
+        properties=pika.BasicProperties(
+            correlation_id=original_message.get("id"),
+            priority=20
+        )
+    )
 ```
 
 ---
@@ -1318,7 +1400,7 @@ steps:
 
 **2. Агент получает, валидирует, выполняет**
 
-**3. Агент отправляет RESULT**:
+**3. Агент отправляет RESULT** (через RPC reply-to):
 
 ```json
 {
@@ -1333,12 +1415,12 @@ steps:
 
   "data": {
     "status": "SUCCESS",
-    "result": {
+    "output": {
       "article": "The AI landscape in 2025...",
       "word_count": 2047
     },
     "execution_time_ms": 12450,
-    "metadata": {
+    "metrics": {
       "model": "gpt-4",
       "tokens_used": 3500
     }
@@ -1346,7 +1428,12 @@ steps:
 }
 ```
 
-**AMQP**: `correlation_id='cmd-12345'`, `reply_to='orchestrator.results'`
+**AMQP** (RPC reply-to pattern):
+```python
+exchange='',                      # Default exchange
+routing_key=reply_to_queue,       # Очередь из COMMAND.reply_to
+correlation_id='cmd-12345'        # Связь с исходной командой
+```
 
 **4. Оркестратор публикует EVENT о завершении**:
 
@@ -1372,7 +1459,7 @@ steps:
 }
 ```
 
-**AMQP**: `routing_key='evt.orchestrator.task_completed'`, `priority=10`
+**AMQP**: `routing_key='evt.task.completed'`, `priority=10`
 
 ---
 
@@ -1433,6 +1520,21 @@ steps:
 **Кто ретраит:**
 - **Orchestrator** ретраит на уровне COMMAND (republish в MindBus)
 - **Agent** НЕ ретраит (выполняет команду один раз, возвращает ERROR при неудаче)
+
+**КРИТИЧЕСКОЕ ПРАВИЛО (MUST NOT):**
+
+> **Agent НИКОГДА не делает retry самостоятельно**, даже если ошибка `retryable=true`.
+>
+> Retry — это ответственность **Orchestrator**, который:
+> 1. Получает ERROR с `retryable=true`
+> 2. Проверяет retry_policy из исходного COMMAND
+> 3. Применяет exponential backoff
+> 4. Republish COMMAND в MindBus (возможно другому агенту)
+>
+> Это гарантирует **централизованный контроль retry-логики** и предотвращает:
+> - Каскадные retry-штормы
+> - Потерю контекста выполнения
+> - Невозможность отследить количество попыток
 
 **Retry Policy в COMMAND:**
 ```python
@@ -1731,6 +1833,12 @@ asyncapi validate asyncapi.yaml
 - ✅ AsyncAPI 3.0.0 совместимость
 - ✅ Действие (action) вместо command_type
 
+**Изменения в v1.1.4**:
+- ✅ **ДОБАВЛЕНО**: Event type `task.progress` — периодический отчёт о выполнении задачи
+- ✅ **ПРИЧИНА**: Позволяет отличить "работает долго" от "завис"
+- ✅ **ИСПОЛЬЗОВАНИЕ**: Агент отправляет каждые N секунд пока работает над задачей
+- ✅ **СВЯЗЬ**: См. AGENT_SPEC v1.0.3 раздел "Progress Heartbeat"
+
 **Следующие шаги**:
 1. Реализация Pydantic моделей v1.1 в `src/common/schemas/messages.py`
 2. Интеграция валидации в MindBus SDK
@@ -1739,6 +1847,10 @@ asyncapi validate asyncapi.yaml
 
 **Статус реализации**: Step 1.1 ✅ ЗАВЕРШЁН (100%)
 
-**Версия**: v1.1.2 (patch: исправление RESULT status противоречия из SSOT Audit)
-**Последнее обновление**: 2025-12-15
-**Экспертная оценка**: 95/100 → 96/100 (после audit fixes) — см. [SSOT_AUDIT_2025-12-15.md](../audits/SSOT_AUDIT_2025-12-15.md)
+**Версия**: v1.1.4 (добавлен task.progress event type)
+**Последнее обновление**: 2025-12-18
+**Экспертная оценка**: 97/100
+
+**Аудиты**:
+- [SSOT_AUDIT_2025-12-15.md](../audits/SSOT_AUDIT_2025-12-15.md) — первичный аудит
+- [SSOT_AUDIT_2025-12-17_protocol_sync.md](../audits/SSOT_AUDIT_2025-12-17_protocol_sync.md) — синхронизация с MindBus Protocol v1.0.1

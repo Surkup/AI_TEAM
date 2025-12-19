@@ -1,0 +1,97 @@
+# MindBus Configuration
+# Zero Hardcoding: All parameters are externalized here
+# See: CLAUDE.md section "⚙️ Нулевой хардкод (Zero Hardcoding)"
+
+mindbus:
+  # RabbitMQ connection settings
+  rabbitmq:
+    host: "localhost"
+    port: 5672
+    virtual_host: "/"
+    # Credentials from environment variables (never hardcode secrets!)
+    # RABBITMQ_USER and RABBITMQ_PASSWORD should be set in .env
+    username_env: "RABBITMQ_USER"
+    password_env: "RABBITMQ_PASSWORD"
+    # Default credentials for local development only
+    default_username: "guest"
+    default_password: "guest"
+
+  # Exchange configuration (MindBus Protocol v1.0)
+  exchange:
+    name: "ai_team"
+    type: "topic"
+    durable: true
+    auto_delete: false
+
+  # Queue configuration
+  queues:
+    # Default queue settings
+    durable: true
+    auto_delete: false
+    # Dead Letter Exchange for failed messages
+    dead_letter_exchange: "ai_team.dlx"
+    # Message TTL (milliseconds) - 5 minutes default
+    message_ttl_ms: 300000
+
+  # Message priorities (from MindBus Protocol v1.0)
+  priorities:
+    event: 10       # Low priority for events/heartbeats
+    command: 20     # Normal priority for commands
+    result: 20      # Normal priority for results
+    error: 20       # Normal priority for errors
+    control: 255    # Maximum priority for control signals
+
+  # Timeouts and limits
+  timeouts:
+    # Default command timeout (seconds)
+    default_command_timeout_seconds: 300
+    # Maximum allowed timeout (seconds)
+    max_command_timeout_seconds: 3600
+    # Connection timeout (seconds)
+    connection_timeout_seconds: 10
+
+  # Connection parameters (pika.ConnectionParameters)
+  connection:
+    # Heartbeat timeout (seconds)
+    # For long-running LLM operations, 300s is recommended
+    # RabbitMQ default is 60s which is too short for AI tasks
+    heartbeat_seconds: 300
+    # Blocked connection timeout (seconds)
+    # How long to wait when RabbitMQ cannot accept messages
+    blocked_connection_timeout_seconds: 300
+
+  # Retry policy defaults
+  retry:
+    max_attempts: 3
+    retry_delay_seconds: 5
+    backoff_multiplier: 2.0
+
+  # Validation settings
+  validation:
+    # Strict mode: reject on any validation error
+    strict_mode: true
+    # Log validation errors with full details
+    log_validation_errors: true
+    # Send ERROR response back to sender on validation failure
+    send_error_responses: true
+
+  # Logging
+  logging:
+    # Log level: DEBUG, INFO, WARNING, ERROR
+    level: "INFO"
+    # Include trace context in logs
+    include_trace_context: true
+    # Log message bodies (disable in production for privacy)
+    log_message_bodies: true
+
+# Routing key patterns (from MindBus Protocol v1.0)
+# Format: {type}.{target}.{id}
+# Examples:
+#   cmd.writer.any      - command to any writer agent
+#   cmd.writer.001      - command to specific writer
+#   evt.task.completed  - task completion event
+#   ctl.all.stop        - stop all nodes
+routing:
+  command_prefix: "cmd"
+  event_prefix: "evt"
+  control_prefix: "ctl"

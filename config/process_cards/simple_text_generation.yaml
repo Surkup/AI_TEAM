@@ -1,0 +1,35 @@
+# Simple Text Generation Process Card
+# A basic example that generates text using an AI agent
+#
+# This card demonstrates:
+# - Single step execution
+# - Variable passing
+# - Process completion
+
+metadata:
+  id: "card-simple-text-001"
+  name: "simple_text_generation"
+  version: "1.0"
+  description: "Generate text based on a prompt using AI agent"
+  author: "ai_team"
+
+spec:
+  variables:
+    prompt: ""
+    generated_text: null
+
+  steps:
+    # Step 1: Generate text
+    - id: "step_generate"
+      action: "generate_text"
+      params:
+        prompt: ${input.prompt}
+        max_tokens: 500
+      output: generated_text
+      timeout_seconds: 120
+
+    # Step 2: Complete process
+    - id: "step_complete"
+      type: "complete"
+      status: "success"
+      result: ${generated_text}

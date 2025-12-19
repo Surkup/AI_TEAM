@@ -1,0 +1,21 @@
+# API Gateway Configuration
+# See: docs/project/IMPLEMENTATION_ROADMAP.md Шаг 2.2
+
+api_gateway:
+  # Server settings
+  host: "0.0.0.0"
+  port: 8000
+
+  # Process cards directory
+  process_cards_dir: "config/process_cards"
+
+  # Request limits
+  max_request_size_mb: 10
+  request_timeout_seconds: 300
+
+  # CORS settings (for web clients)
+  cors:
+    enabled: true
+    allow_origins: ["*"]
+    allow_methods: ["GET", "POST", "PUT", "DELETE"]
+    allow_headers: ["*"]

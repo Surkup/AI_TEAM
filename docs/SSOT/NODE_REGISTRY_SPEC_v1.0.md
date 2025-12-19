@@ -3,8 +3,13 @@
 **Unified Node Registry for AI_TEAM**
 
 **Статус**: ✅ Утверждено (Approved)
-**Версия**: 1.0
-**Дата**: 2025-12-15
+**Версия**: 1.0.1
+**Дата**: 2025-12-17
+
+**Changelog v1.0.1** (2025-12-17):
+- **УТОЧНЕНО**: Регистрация выполняется через API (etcd/Consul), а НЕ через MindBus Events
+- **ДОБАВЛЕНО**: Разделение на API (регистрация) и Events (уведомления)
+- **ДОБАВЛЕНО**: Пример кода регистрации через etcd + уведомление в MindBus
 
 ---
 
@@ -245,7 +250,49 @@ class InMemoryNodeRegistry:
 
 ### 2.3. Регистрация узла
 
-**Обязательные шаги** (жизненный цикл узла):
+#### 2.3.1. Способ регистрации: API (не Events!)
+
+**ВАЖНО**: Регистрация узла выполняется через **прямой API вызов** к etcd/Consul, а НЕ через MindBus Events.
+
+**Причины выбора API**:
+- ✅ **Синхронность**: Узел получает подтверждение "я зарегистрирован" или ошибку
+- ✅ **Надёжность**: API даёт гарантию записи в Registry
+- ✅ **Heartbeat**: etcd/Consul имеют встроенный TTL/Lease механизм
+- ✅ **Ready-Made First**: Используем etcd/Consul как задумано их создателями
+
+**Events НЕ используются для регистрации**, потому что:
+- ❌ Fire-and-forget — нет гарантии что Registry получил сообщение
+- ❌ Нужен дополнительный механизм подтверждения
+- ❌ Это "изобретение велосипеда" поверх готового решения
+
+#### 2.3.2. Роль Events: Уведомления (опционально)
+
+**После** успешной регистрации через API, узел **может** опубликовать событие в MindBus для информирования других компонентов (Monitor, Logger, Dashboard):
+
+```python
+# 1. Регистрация через API (ОБЯЗАТЕЛЬНО)
+await etcd_client.put(
+    key=f"/ai_team/registry/nodes/{self.uid}",
+    value=json.dumps(self.passport),
+    lease=lease_id  # TTL через etcd Lease
+)
+
+# 2. Уведомление через MindBus (ОПЦИОНАЛЬНО, для мониторинга)
+channel.basic_publish(
+    exchange='mindbus.main',
+    routing_key='evt.registry.node_registered',  # О ЧЁМ событие
+    body=json.dumps({
+        "specversion": "1.0",
+        "type": "ai.team.event",
+        "source": f"agent.{self.role}.{self.uid}",  # КТО отправил
+        "data": {"node_uid": self.uid, "node_type": "agent"}
+    })
+)
+```
+
+#### 2.3.3. Жизненный цикл узла
+
+**Обязательные шаги**:
 
 ```
 1. [Узел стартует]
@@ -255,19 +302,24 @@ class InMemoryNodeRegistry:
    → Заполняет spec (capabilities, resources, endpoint)
    → Заполняет status (phase=Pending, conditions)
    ↓
-3. [Регистрируется в Registry]
-   → Отправляет NODE PASSPORT в Registry
-   → Registry валидирует и сохраняет
+3. [Регистрируется в Registry через API]
+   → PUT в etcd: /ai_team/registry/nodes/{uid}
+   → Создаёт Lease с TTL (etcd встроенный механизм)
+   → Получает подтверждение OK или ERROR
    ↓
-4. [Начинает отправлять heartbeat]
-   → Периодически обновляет Lease (каждые 10s)
-   → Registry обновляет last_seen timestamp
+4. [Публикует уведомление в MindBus] (опционально)
+   → evt.registry.node_registered
+   → Для мониторинга и логирования
    ↓
-5. [Переходит в phase: Running]
+5. [etcd Lease обеспечивает heartbeat]
+   → Узел периодически продлевает Lease (каждые 10s)
+   → etcd автоматически удаляет запись при истечении TTL
+   ↓
+6. [Переходит в phase: Running]
    → Обновляет status.phase = "Running"
    → Обновляет status.conditions[Ready] = True
    ↓
-6. [Готов принимать задачи]
+7. [Готов принимать задачи]
 ```
 
 **Поведение при сбое**:
@@ -580,7 +632,7 @@ Node Passport v2.0 → Registry v1.0 ❌ (breaking change, требуется о
 
 ---
 
-**Версия**: 1.0
-**Дата**: 2025-12-15
+**Версия**: 1.0.1
+**Дата**: 2025-12-17
 **Авторы**: AI_TEAM Core Team
 **Статус**: ✅ Утверждено (Approved)

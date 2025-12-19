@@ -1,0 +1,175 @@
+# Writer Agent Configuration
+# Display Name: "Пушкин" - первый специализированный агент AI_TEAM
+#
+# Features:
+# - LLM-powered content generation (via LiteLLM)
+# - Agent Loop with self-critique (via LangGraph)
+# - Tools Framework: web_search, memory_* (AGENT_SPEC v1.0)
+# - Progress Heartbeat for long-running tasks (AGENT_SPEC v1.0.3)
+#
+# See: docs/SSOT/AGENT_SPEC_v1.0.md (Section 14.5 Progress Heartbeat)
+# See: docs/project/IMPLEMENTATION_ROADMAP.md
+
+writer_agent:
+  name: "agent.writer.001"
+  type: "writer"
+  version: "1.0.0"
+
+  # Display Identity (для Monitor) — человеческое имя
+  # See: docs/concepts/drafts/AGENT_HUMAN_NAMES_v0.1.md
+  display:
+    name: "Пушкин"
+    description: "AI-копирайтер, специализирующийся на создании текстового контента"
+    avatar: null  # Опционально в будущем
+
+  # Capabilities (SSOT: NODE_PASSPORT_SPEC_v1.0)
+  capabilities:
+    - name: "write_article"
+      version: "1.0.0"
+      description: "Написать статью на заданную тему"
+      parameters:
+        topic:
+          type: "string"
+          required: true
+          description: "Тема статьи"
+        style:
+          type: "string"
+          required: false
+          default: "formal"
+          enum: ["formal", "casual", "technical", "creative"]
+          description: "Стиль написания"
+        length:
+          type: "integer"
+          required: false
+          description: "Примерное количество слов (опционально, задаётся в задаче)"
+        language:
+          type: "string"
+          required: false
+          default: "ru"
+          description: "Язык статьи (ISO 639-1)"
+
+    - name: "improve_text"
+      version: "1.0.0"
+      description: "Улучшить существующий текст по обратной связи"
+      parameters:
+        text:
+          type: "string"
+          required: true
+          description: "Исходный текст для улучшения"
+        feedback:
+          type: "string"
+          required: true
+          description: "Обратная связь: что нужно улучшить"
+        preserve_style:
+          type: "boolean"
+          required: false
+          default: true
+          description: "Сохранить оригинальный стиль"
+
+    - name: "generate_outline"
+      version: "1.0.0"
+      description: "Создать структуру/план статьи"
+      parameters:
+        topic:
+          type: "string"
+          required: true
+          description: "Тема статьи"
+        sections_count:
+          type: "integer"
+          required: false
+          default: 5
+          description: "Количество основных разделов"
+
+  # LLM Configuration (Ready-Made First: LiteLLM)
+  # See: docs/concepts/AGENT_ARCHITECTURE_draft.md Section 12.2
+  llm:
+    provider: "openai"           # LiteLLM поддерживает: openai, anthropic, ollama, etc.
+    model: "gpt-4o"              # Основная модель для качественного контента
+    temperature: 0.7             # Креативность (0.0-1.0)
+    max_tokens: 4000             # Максимум токенов на ответ
+
+    # System prompt — "личность" агента
+    system_prompt: |
+      Ты — Пушкин, профессиональный AI-копирайтер с глубокими знаниями в создании контента.
+
+      Твои сильные стороны:
+      - Ясный, структурированный стиль изложения
+      - Адаптация под целевую аудиторию
+      - Глубокое раскрытие темы
+      - Использование примеров и аналогий
+
+      Правила работы:
+      - Всегда структурируй текст с заголовками (H2, H3)
+      - Пиши на языке, указанном в параметрах (по умолчанию — русский)
+      - Избегай воды и общих фраз
+      - Если тема требует исследования — честно укажи это в тексте
+
+      Формат вывода: Markdown
+
+  # Fallback LLM (если основная модель недоступна)
+  llm_fallback:
+    enabled: true
+    provider: "openai"
+    model: "gpt-4o-mini"         # Более дешёвая модель как fallback
+    temperature: 0.7
+    max_tokens: 2000
+
+  # Agent Loop Configuration (Ready-Made First: LangGraph)
+  # See: docs/concepts/AGENT_ARCHITECTURE_draft.md Section 12.3
+  agent_loop:
+    framework: "langgraph"
+    max_iterations: 5            # Максимум итераций think-act-observe
+    timeout_seconds: 300         # 5 минут на задачу
+    enable_self_critique: true   # Агент проверяет свой результат перед отправкой
+
+  # Memory Configuration
+  memory:
+    short_term:
+      enabled: true
+      max_context_tokens: 8000   # Сколько токенов держать в контексте
+    long_term:
+      enabled: false             # MVP: отключено
+      provider: "chroma"         # Для будущей реализации
+      collection: "writer_memory"
+
+  # Tools Configuration (AGENT_SPEC_v1.0 Section 4)
+  # Enables the agent to use external tools for research and memory
+  tools:
+    enabled:
+      - web_search       # Search the internet for information
+      - memory_read      # Read from agent's working memory
+      - memory_write     # Write to agent's working memory
+    enable_research: true   # Enable research phase before writing
+    max_tool_calls: 10      # Maximum tool calls per task
+
+  # Resource Limits
+  limits:
+    max_concurrent_tasks: 1      # Сколько задач параллельно
+    max_tool_calls_per_task: 10  # Лимит вызовов инструментов
+    cost_limit_usd: 1.0          # Лимит на задачу в USD
+
+  # Labels for Node Passport (Kubernetes style)
+  labels:
+    team: "ai_team"
+    role: "writer"
+    specialization: "content"
+    capability.write_article: "true"
+    capability.improve_text: "true"
+    capability.generate_outline: "true"
+
+  # Node Registry Configuration
+  registry:
+    enabled: true
+    heartbeat_interval_seconds: 10
+
+  # Progress Heartbeat Configuration (AGENT_SPEC v1.0.3)
+  # Periodic reporting of task progress for long-running operations
+  # Allows to distinguish "working long" from "stuck/crashed"
+  # See: docs/SSOT/AGENT_SPEC_v1.0.md Section 14.5
+  progress_heartbeat:
+    enabled: true
+    interval_seconds: 30          # Send progress every 30 seconds
+    # Agent is considered "stuck" if no progress for 3 intervals (90 sec)
+
+  # Logging
+  log_level: "INFO"

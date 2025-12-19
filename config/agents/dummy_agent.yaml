@@ -1,22 +1,79 @@
 # Dummy Agent Configuration
-# Конфигурация для DummyAgent (используется на Этапе 1)
+# Test agent for AI_TEAM infrastructure validation
+#
+# Features:
+# - Simulates work with configurable delay
+# - Configurable success rate for testing error handling
+# - Full AGENT_SPEC v1.0 compliance
+#
+# See: docs/SSOT/AGENT_SPEC_v1.0.md
+# See: docs/project/IMPLEMENTATION_ROADMAP.md Step 1.4
 
 dummy_agent:
-  name: "dummy_agent"
+  name: "agent.dummy.001"
+  type: "dummy"
+  version: "1.0.0"
 
-  # Имитация работы
-  mock_delay_seconds: 1.0  # Задержка для имитации реальной работы
-  success_rate: 1.0  # 1.0 = всегда успешно, 0.8 = 80% успешно
+  # Display Identity (for Monitor) - human-readable name
+  display:
+    name: "Тестовый агент"
+    description: "Тестовый агент для проверки инфраструктуры AI_TEAM"
+    avatar: null
 
-  # Логирование
-  log_level: "DEBUG"  # DEBUG для разработки, INFO для production
+  # Capabilities (SSOT: NODE_PASSPORT_SPEC_v1.0)
+  capabilities:
+    - name: "test.echo"
+      version: "1.0.0"
+      description: "Echo back the received params (for testing)"
+      parameters:
+        message:
+          type: "string"
+          required: false
+          description: "Message to echo"
 
-  # MindBus подписка
-  subscriptions:
-    - type: "COMMAND"
-      to: "dummy_agent"
+    - name: "generate_article"
+      version: "1.0.0"
+      description: "Generate mock article (simulated)"
+      parameters:
+        topic:
+          type: "string"
+          required: true
+          description: "Article topic"
+        length:
+          type: "integer"
+          required: false
+          default: 1000
+          description: "Target word count"
 
-  # Параметры ответа
-  response:
-    default_status: "SUCCESS"
-    default_result: "Task completed successfully"
+  # Mock behavior configuration
+  mock_delay_seconds: 1.0  # Delay to simulate real work
+  success_rate: 1.0        # 1.0 = always success, 0.8 = 80% success rate
+
+  # Tools Configuration (AGENT_SPEC Section 4)
+  # DummyAgent has minimal tools for testing
+  tools:
+    enabled:
+      - memory_read
+      - memory_write
+    max_tool_calls: 5
+
+  # Resource Limits
+  limits:
+    max_concurrent_tasks: 1
+    max_tool_calls_per_task: 5
+
+  # Labels for Node Passport (Kubernetes style)
+  labels:
+    team: "ai_team"
+    role: "testing"
+    environment: "development"
+    capability.test.echo: "true"
+    capability.generate_article: "true"
+
+  # Node Registry Configuration
+  registry:
+    enabled: true
+    heartbeat_interval_seconds: 300  # 5 min - increased to avoid pika race condition
+
+  # Logging
+  log_level: "INFO"

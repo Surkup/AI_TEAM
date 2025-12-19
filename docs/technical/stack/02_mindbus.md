@@ -1,7 +1,7 @@
 # MindBus: RabbitMQ + AMQP 0-9-1 + CloudEvents
 
 **Статус:** ✅ УТВЕРЖДЕНО
-**Последнее обновление:** 2025-12-15
+**Последнее обновление:** 2025-12-18
 
 ---
 
@@ -99,6 +99,53 @@ channel = connection.channel()
 ```
 
 **Никакой custom реализации протокола** — используем готовые, протестированные библиотеки.
+
+---
+
+### ⚠️ ВАЖНО: Thread Safety (pika.BlockingConnection)
+
+> *Добавлено 2025-12-18 по результатам отладки*
+
+**`pika.BlockingConnection` НЕ является потокобезопасной!**
+
+**Проблема**: Если один поток слушает сообщения (`start_consuming`), а другой поток отправляет сообщения через то же соединение — возникает race condition:
+
+```
+ERROR: IndexError: pop from an empty deque
+ERROR: StreamLostError: Transport indicated EOF
+```
+
+**Решение**: Для операций из разных потоков создавать **ОТДЕЛЬНЫЕ соединения**:
+
+```python
+# ❌ НЕПРАВИЛЬНО — одно соединение на два потока
+self.bus = MindBus()
+self.bus.connect()
+
+# Поток 1: слушает сообщения
+threading.Thread(target=self.bus.start_consuming).start()
+
+# Поток 2: отправляет heartbeat (CRASH!)
+self.bus.send_event("heartbeat", ...)
+
+
+# ✅ ПРАВИЛЬНО — отдельное соединение для каждого потока
+self.bus = MindBus()           # Основной поток
+self.bus.connect()
+
+self.heartbeat_bus = MindBus()  # Фоновый поток
+self.heartbeat_bus.connect()
+
+# Поток 1: слушает через основное соединение
+threading.Thread(target=self.bus.start_consuming).start()
+
+# Поток 2: отправляет через своё соединение
+self.heartbeat_bus.send_event("heartbeat", ...)
+```
+
+**Правило**: Один поток = одно соединение MindBus.
+
+**Подробнее**: См. [AGENT_SPEC v1.0.2, раздел 14.4](../../SSOT/AGENT_SPEC_v1.0.md#144-архитектура-соединений-mindbus-thread-safety)
 
 ---
 
@@ -207,7 +254,7 @@ Task execution (trace_id: 4bf92f3577b34da6a3ce929d0e0e4736)
 
 **Routing Keys:**
 - `cmd.{role}.{agent_id}` — команда для агента (например: `cmd.writer.any`)
-- `evt.{source}.{status}` — событие (например: `evt.task.completed`)
+- `evt.{topic}.{event_type}` — событие (например: `evt.task.completed`, `evt.node.heartbeat`)
 - `ctl.{target}.{scope}` — управляющий сигнал (например: `ctl.all.stop`)
 
 ### Priority Queues

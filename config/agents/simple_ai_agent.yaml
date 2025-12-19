@@ -1,0 +1,37 @@
+# Simple AI Agent Configuration
+# Конфигурация для SimpleAIAgent с реальным LLM
+# See: docs/project/IMPLEMENTATION_ROADMAP.md Step 1.6
+
+simple_ai_agent:
+  name: "simple_ai_agent"
+  type: "ai_agent"
+
+  # Capabilities (what this agent can do)
+  capabilities:
+    - "generate_text"
+
+  # LLM Configuration
+  llm:
+    provider: "openai"        # "openai" or "anthropic"
+    model: "gpt-4o-mini"      # Model to use
+    temperature: 0.7          # Creativity (0.0-1.0)
+    max_tokens: 500           # Max response length
+
+  # Fallback provider (if primary fails)
+  fallback:
+    enabled: false
+    provider: "anthropic"
+    model: "claude-3-haiku-20240307"
+
+  # Logging
+  log_level: "INFO"
+
+  # Node Registry
+  registry:
+    enabled: true
+    heartbeat_interval_seconds: 10
+
+  # Progress Heartbeat (AGENT_SPEC v1.0.3)
+  progress_heartbeat:
+    enabled: true
+    interval_seconds: 30

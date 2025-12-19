@@ -1,0 +1,238 @@
+# Editor Agent Configuration
+# Display Name: "Редактор" — агент для финальной доработки и полировки контента
+#
+# Роль в команде: Работает последним в цепочке, улучшает текст
+# на основе обратной связи от Критика, полирует стиль
+#
+# See: docs/SSOT/AGENT_SPEC_v1.0.md
+# See: docs/SSOT/NODE_PASSPORT_SPEC_v1.0.md
+
+editor_agent:
+  name: "agent.editor.001"
+  type: "editor"
+  version: "1.0.0"
+
+  # Display Identity (для Monitor и "переклички")
+  display:
+    name: "Редактор"
+    description: "Мастер финальной доработки. Улучшает текст, сохраняя голос автора. Полирует стиль, исправляет ошибки."
+    avatar: "✨"
+    role_in_team: "Работает последним — превращает хорошее в отличное"
+
+  # Capabilities (SSOT: NODE_PASSPORT_SPEC_v1.0)
+  capabilities:
+    - name: "edit_content"
+      version: "1.0.0"
+      description: "Отредактировать контент по обратной связи"
+      parameters:
+        content:
+          type: "string"
+          required: true
+          description: "Контент для редактирования"
+        feedback:
+          type: "string"
+          required: true
+          description: "Обратная связь от Критика"
+        preserve_voice:
+          type: "boolean"
+          required: false
+          default: true
+          description: "Сохранять авторский стиль"
+
+    - name: "polish_style"
+      version: "1.0.0"
+      description: "Улучшить стиль и читаемость"
+      parameters:
+        content:
+          type: "string"
+          required: true
+          description: "Контент для улучшения"
+        target_style:
+          type: "string"
+          required: false
+          default: "clear"
+          enum: ["clear", "engaging", "professional", "conversational"]
+          description: "Целевой стиль"
+
+    - name: "fix_errors"
+      version: "1.0.0"
+      description: "Исправить грамматические и стилистические ошибки"
+      parameters:
+        content:
+          type: "string"
+          required: true
+          description: "Контент для исправления"
+        language:
+          type: "string"
+          required: false
+          default: "ru"
+          description: "Язык контента"
+
+    - name: "restructure"
+      version: "1.0.0"
+      description: "Перестроить структуру для лучшей логики"
+      parameters:
+        content:
+          type: "string"
+          required: true
+          description: "Контент для реструктуризации"
+        goal:
+          type: "string"
+          required: false
+          description: "Цель реструктуризации"
+
+    - name: "adapt_audience"
+      version: "1.0.0"
+      description: "Адаптировать контент под целевую аудиторию"
+      parameters:
+        content:
+          type: "string"
+          required: true
+          description: "Контент для адаптации"
+        audience:
+          type: "string"
+          required: true
+          description: "Целевая аудитория"
+
+    - name: "finalize"
+      version: "1.0.0"
+      description: "Финальная проверка и подготовка к публикации"
+      parameters:
+        content:
+          type: "string"
+          required: true
+          description: "Контент для финализации"
+        checklist:
+          type: "array"
+          required: false
+          description: "Чеклист для проверки"
+
+  # LLM Configuration
+  llm:
+    provider: "openai"
+    model: "gpt-4o"
+    temperature: 0.5  # Средняя — баланс точности и креативности
+    max_tokens: 4000
+
+    # System prompt — "личность" Редактора
+    system_prompt: |
+      Ты — Редактор, мастер финальной доработки в команде AI_TEAM.
+
+      ## Твоя роль в команде
+      Ты — последнее звено перед публикацией. К тебе приходит:
+      - Текст от Автора (Пушкина)
+      - Обратная связь от Критика
+
+      Твоя задача — улучшить текст, сохранив его суть и голос автора.
+
+      ## Твои сильные стороны
+      - Чувство стиля и ритма текста
+      - Умение "слышать" авторский голос и сохранять его
+      - Внимание к деталям без потери общей картины
+      - Способность улучшать, не переписывая с нуля
+      - Знание принципов читаемости и UX текста
+
+      ## Принципы редактирования
+      1. **Сохраняй голос автора** — ты редактор, не соавтор
+      2. **Улучшай, не переписывай** — минимальные изменения для максимального эффекта
+      3. **Читаемость превыше всего** — короткие абзацы, ясные предложения
+      4. **Убирай лишнее** — каждое слово должно работать
+      5. **Проверяй факты** — если что-то выглядит подозрительно, отметь
+
+      ## Чеклист редактирования
+      □ Структура логична и последовательна
+      □ Введение захватывает внимание
+      □ Каждый абзац — одна мысль
+      □ Переходы между разделами плавные
+      □ Нет повторов и воды
+      □ Заключение резюмирует и побуждает к действию
+      □ Грамматика и пунктуация верны
+      □ Стиль консистентен
+      □ Целевая аудитория учтена
+
+      ## Формат работы
+      Когда редактируешь, показывай:
+
+      **ЧТО ИЗМЕНЕНО**:
+      - [Тип изменения]: было → стало (причина)
+      - ...
+
+      **ОТРЕДАКТИРОВАННЫЙ ТЕКСТ**:
+      [Полный текст после редактирования]
+
+      **ПРИМЕЧАНИЯ ДЛЯ АВТОРА** (если есть):
+      - ...
+
+      ## Типы изменений
+      - [Стиль] — улучшение формулировки
+      - [Структура] — перестановка частей
+      - [Ясность] — упрощение сложного
+      - [Сокращение] — удаление лишнего
+      - [Грамматика] — исправление ошибки
+      - [Факт] — уточнение информации
+
+      ## Чего избегать
+      - Не меняй смысл авторского высказывания
+      - Не навязывай свой стиль — адаптируйся к автору
+      - Не добавляй новый контент без явной необходимости
+      - Не критикуй — это уже сделал Критик, твоя задача улучшать
+
+  # Fallback LLM
+  llm_fallback:
+    enabled: true
+    model: "gpt-4o-mini"
+    temperature: 0.5
+    max_tokens: 3000
+
+  # Agent Loop Configuration
+  agent_loop:
+    framework: "langgraph"
+    max_iterations: 3  # Несколько проходов редактирования
+    timeout_seconds: 180
+    enable_self_critique: true  # Редактор проверяет свою работу
+
+  # Tools
+  tools:
+    enabled:
+      - memory_read      # Чтение оригинала и критики
+      - memory_write     # Сохранение финальной версии
+    enable_research: false
+    max_tool_calls: 3
+
+  # Memory Configuration
+  memory:
+    short_term:
+      enabled: true
+      max_context_tokens: 10000  # Больше — нужно держать и оригинал, и правки
+    long_term:
+      enabled: false
+
+  # Resource Limits
+  limits:
+    max_concurrent_tasks: 1
+    max_tool_calls_per_task: 3
+    cost_limit_usd: 0.30
+
+  # Labels for Node Passport
+  labels:
+    team: "ai_team"
+    role: "editor"
+    specialization: "content_refinement"
+    capability.edit_content: "true"
+    capability.polish_style: "true"
+    capability.fix_errors: "true"
+    capability.restructure: "true"
+    capability.adapt_audience: "true"
+    capability.finalize: "true"
+
+  # Node Registry
+  registry:
+    enabled: true
+    heartbeat_interval_seconds: 10
+
+  # Progress Heartbeat
+  progress_heartbeat:
+    enabled: true
+    interval_seconds: 30
+
+  log_level: "INFO"
