@@ -44,6 +44,7 @@ except ImportError:
     logging.warning("LangGraph not installed. Run: pip install langgraph")
 
 from .base_agent import BaseAgent
+from .agent_memory import AgentMemory
 
 load_dotenv()
 
@@ -153,12 +154,29 @@ class CreativeAgent(BaseAgent):
         self.enable_research = tools_config.get("enable_research", False)
         self.max_tool_calls = tools_config.get("max_tool_calls", 10)
 
+        # Memory settings (Этап 5: Persistent Storage)
+        memory_config = self.config.get("memory", {})
+        self.enable_memory = memory_config.get("enabled", True)
+        self.auto_save_works = memory_config.get("auto_save_works", True)
+
+        # Initialize AgentMemory
+        if self.enable_memory:
+            try:
+                self.memory = AgentMemory(agent_name=self.name)
+                logger.info(f"[{self.display_name}] Memory enabled")
+            except Exception as e:
+                logger.warning(f"[{self.display_name}] Memory init failed: {e}")
+                self.memory = None
+        else:
+            self.memory = None
+
         # Build workflow
         self._workflow = self._build_workflow() if LANGGRAPH_AVAILABLE else None
 
         logger.info(
             f"{self.display_avatar} {self.display_name} initialized: "
-            f"model={self.llm_model}, temp={self.llm_temperature}"
+            f"model={self.llm_model}, temp={self.llm_temperature}, "
+            f"memory={'ON' if self.memory else 'OFF'}"
         )
 
     def _build_workflow(self) -> Optional[Any]:
@@ -384,6 +402,22 @@ class CreativeAgent(BaseAgent):
 
         state["result"] = result
         state["phase"] = AgentPhase.FINISH.value
+
+        # Auto-save to memory (Этап 5: Persistent Storage)
+        if self.memory and self.auto_save_works:
+            try:
+                params = state.get("params", {})
+                topic = params.get("topic", params.get("content", ""))[:100]
+                artifact_id = self.memory.save_work(
+                    action=action,
+                    result=result,
+                    topic=topic if topic else None,
+                )
+                result["memory"] = {"saved": True, "artifact_id": artifact_id}
+                logger.info(f"[{self.display_name}] Work saved to memory: {artifact_id[:30]}...")
+            except Exception as e:
+                logger.warning(f"[{self.display_name}] Failed to save to memory: {e}")
+                result["memory"] = {"saved": False, "error": str(e)}
 
         logger.info(
             f"[{self.display_name}] Finished: "
@@ -620,6 +654,54 @@ class CreativeAgent(BaseAgent):
             f"   {self.display_description}\n"
             f"   Роль: {self.role_in_team}"
         )
+
+    # =========================================================================
+    # Memory Methods (Этап 5: Persistent Storage)
+    # =========================================================================
+
+    def remember(self, key: str, value: Any, importance: int = 5) -> Optional[str]:
+        """
+        Запомнить информацию.
+
+        Args:
+            key: Ключ для поиска
+            value: Что запомнить
+            importance: Важность 1-10
+
+        Returns:
+            artifact_id или None
+        """
+        if not self.memory:
+            logger.warning(f"[{self.display_name}] Memory not enabled")
+            return None
+
+        return self.memory.remember(key=key, value=value, importance=importance)
+
+    def recall(self, topic: str, limit: int = 5) -> Dict[str, Any]:
+        """
+        Вспомнить всё по теме.
+
+        Args:
+            topic: Тема для поиска
+            limit: Максимум результатов
+
+        Returns:
+            {"works": [...], "memories": [...], "total": N}
+        """
+        if not self.memory:
+            logger.warning(f"[{self.display_name}] Memory not enabled")
+            return {"works": [], "memories": [], "total": 0}
+
+        return self.memory.recall_by_topic(topic=topic, limit=limit)
+
+    def get_memory_stats(self) -> Dict[str, Any]:
+        """Получить статистику памяти."""
+        if not self.memory:
+            return {"enabled": False}
+
+        stats = self.memory.get_stats()
+        stats["enabled"] = True
+        return stats
 
 
 # =============================================================================

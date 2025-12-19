@@ -895,36 +895,61 @@ tests/
 
 ## 💾 Этап 5: Storage (хранение данных)
 
-**Статус**: ✅ ЗАВЕРШЁН (спецификация утверждена 2025-12-19)
+**Статус**: ✅ ПОЛНОСТЬЮ ЗАВЕРШЁН (реализация 2025-12-19)
 
 **Цель**: Добавить постоянное хранение для задач, артефактов, истории
 
-### 📝 ОБЯЗАТЕЛЬНО ПЕРЕД НАЧАЛОМ: Проверь хранилище идей!
+### Результаты (2025-12-19)
 
-> **КРИТИЧНО**: Перед началом реализации — загляни в готовые наработки!
+**Спецификация**: [STORAGE_SPEC_v1.1.md](../SSOT/STORAGE_SPEC_v1.1.md)
+- Обновлена по замечаниям экспертов (оценка 9.2/10)
+- Добавлены Invariant 7 (Atomic File Placement) и Invariant 8 (Artifact ID Uniqueness)
+- Добавлена Startup Recovery процедура (Section 5.3)
+- Добавлены Buffer Limits (Section 6.2)
 
-**Уже проработано**:
-- ✅ [STORAGE_SPEC_v1.0.md](../SSOT/STORAGE_SPEC_v1.0.md) — **УТВЕРЖДЁННАЯ SSOT спецификация**
-- ✅ [STORAGE_ARCHITECTURE_DISCUSSION](../concepts/drafts/STORAGE_ARCHITECTURE_DISCUSSION_2025-12-19.md) — протокол обсуждения (оценка 8.8/10)
+**Реализация**: [src/storage/](../../src/storage/)
 
-**Ключевые решения уже приняты**:
-- Трёхуровневая архитектура: Agent State → Process State → Artifacts
-- Технологии: LangGraph Checkpointer + SQLite + fsspec
-- "Pointer, not Payload" — файлы не через MindBus
-- Artifact Manifest v1.0 с AI Context
-- Degradation behavior (retry + buffer)
+| Модуль | Описание | Строк |
+|--------|----------|-------|
+| [models.py](../../src/storage/models.py) | Pydantic + SQLAlchemy модели | ~300 |
+| [file_storage.py](../../src/storage/file_storage.py) | fsspec-based файловое хранилище | ~450 |
+| [storage_service.py](../../src/storage/storage_service.py) | Persistent Storage Service | ~550 |
 
-### Шаг 5.1: Реализовать Storage Adapter
+**Ключевые компоненты**:
+- `ArtifactManifest` — Pydantic модель для метаданных артефакта
+- `ArtifactModel` — SQLAlchemy ORM для SQLite
+- `FileStorage` — fsspec-based файловые операции
+- `PersistentStorageService` — полный Storage Service
+- `StorageServiceHandler` — MindBus COMMAND handler
 
-**Функционал**:
-- Принимает COMMAND `store_artifact`
-- Сохраняет данные (начать с файловой системы)
-- Возвращает RESULT с `artifact_id`
+**Инварианты реализованы**:
+- ✅ Invariant 1: Commit Point — артефакт существует IFF metadata в DB
+- ✅ Invariant 3: Pointer not Payload — только URI через MindBus
+- ✅ Invariant 7: Atomic File Placement — temp и permanent на одной FS
+- ✅ Invariant 8: Artifact ID Uniqueness — UUID формат `art_{uuid4}`
 
-**Критерий успеха Этапа 5**:
-✅ "Результаты задач сохраняются и доступны для просмотра"
+**Тесты**: [tests/test_persistent_storage.py](../../tests/test_persistent_storage.py)
+- 49/49 тестов пройдено
+- Покрытие: Models, FileStorage, Registration, Checksum, Cleanup, Stats, Handler
 
-**Время**: 4-5 часов
+**Технологии (Ready-Made Solutions)**:
+- SQLAlchemy >=2.0.0 — ORM для SQLite
+- fsspec >=2024.0.0 — абстракция файловой системы
+- Pydantic v2 — валидация данных
+
+### Документация
+
+- ✅ [STORAGE_SPEC_v1.1.md](../SSOT/STORAGE_SPEC_v1.1.md) — SSOT спецификация
+- ✅ [STORAGE_ARCHITECTURE_DISCUSSION](../concepts/drafts/STORAGE_ARCHITECTURE_DISCUSSION_2025-12-19.md) — протокол обсуждения
+- ✅ [STORAGE_MEMORY_REVIEW_v1.0.md](../concepts/drafts/STORAGE_MEMORY_REVIEW_v1.0.md) — экспертная ревизия
+- ✅ [CONTEXT_MEMORY_ARCHITECTURE_v1.2.md](../concepts/drafts/CONTEXT_MEMORY_ARCHITECTURE_v1.2.md) — архитектура памяти
+
+**Критерий успеха Этапа 5**: ✅ Выполнен
+- "Результаты задач сохраняются и доступны для просмотра"
+- Persistent SQLite + fsspec backend
+- 49 тестов пройдено
+
+**Время**: ~4 часа (2025-12-19)
 
 ---
 
@@ -1086,7 +1111,21 @@ tests/
 ## 📈 Дальнейшие этапы (не детализированы)
 
 ### Этап 9: Knowledge Base
-Векторное хранилище для контекста.
+
+**Цель**: Векторное хранилище для контекста и памяти агентов.
+
+**📝 ОБЯЗАТЕЛЬНО ПЕРЕД НАЧАЛОМ**: Загляни в черновики!
+
+| Черновик | Что полезного |
+|----------|---------------|
+| [CONTEXT_MEMORY_ARCHITECTURE_v1.2](../concepts/drafts/CONTEXT_MEMORY_ARCHITECTURE_v1.2.md) | Трёхслойная память: Project Canon + Agent Memory + Task Working Set |
+| [STORAGE_MEMORY_REVIEW_v1.0](../concepts/drafts/STORAGE_MEMORY_REVIEW_v1.0.md) | Разграничение Storage vs Memory vs Context Pack |
+
+**💎 Ключевые идеи**:
+- **Memory Namespaces**: Project Memory (изолированная) + Agent Personal Memory + Global Commons
+- **Canon (SSOT проекта)**: Семантическое версионирование (MAJOR/MINOR/PATCH), propose→review→accept
+- **Context Pack**: Пирамида релевантности (Hard Context → Soft Context → RAG Context)
+- **Memory Curator**: Дедупликация, сжатие, архивация (SUMMARY ≠ DELETE)
 
 ---
 
@@ -1130,16 +1169,17 @@ tests/
 
 ## 🎯 Текущий фокус
 
-**Сейчас мы на**: ✅ Этапы 1-4 ЗАВЕРШЕНЫ
+**Сейчас мы на**: ✅ Этапы 1-5 ЗАВЕРШЕНЫ
 
-**Следующий шаг**: Этап 5 — Storage (хранение данных)
+**Следующий шаг**: Этап 6 — Улучшенный Monitor (Web UI)
 
-**Что сделано (2025-12-18)**:
+**Что сделано (2025-12-19)**:
 - ✅ Этап 1: MindBus + Registry + Storage + Orchestrator MVP
 - ✅ Этап 2: API Gateway + E2E тесты
 - ✅ Этап 3: Process Cards (5 примеров)
 - ✅ Этап 4: Творческая команда (5 агентов с реальным AI)
-- ✅ **Всего: 211 тестов пройдено** (97.7% success rate)
+- ✅ Этап 5: Persistent Storage (SQLite + fsspec)
+- ✅ **Всего: 260 тестов пройдено** (+49 Storage тестов)
 
 **Что работает**:
 - CLI: `./venv/bin/python -m src.cli demo`
@@ -1147,17 +1187,24 @@ tests/
 - Process Cards: 6 готовых шаблонов (включая creative_project)
 - Web Monitor: `./venv/bin/python -m src.web.monitor` → http://localhost:8080
 - Творческая команда: 5 агентов online, коммуникация через RabbitMQ
+- **NEW**: Persistent Storage с SQLite + fsspec
 
-**Творческая команда запущена**:
-```bash
-# Запустить монитор
-./venv/bin/python -m src.web.monitor
+**Storage Service**:
+```python
+from src.storage import PersistentStorageService
 
-# Запустить агента (в отдельном терминале)
-./venv/bin/python -c "from src.agents.creative_agent import ResearcherAgent; ResearcherAgent().start()"
+storage = PersistentStorageService()
+manifest = storage.register_artifact(
+    content=b'{"result": "success"}',
+    artifact_type="research_report",
+    trace_id="trace_001",
+    created_by="ai.researcher",
+    filename="report.json",
+)
+print(f"Artifact: {manifest.id}, URI: {manifest.uri}")
 ```
 
-**Цель Этапа 5**: Добавить постоянное хранение для артефактов и истории.
+**Цель Этапа 6**: Создать удобный Web UI для наблюдения за системой.
 
 ---
 
@@ -1193,9 +1240,11 @@ tests/
 | [ORCHESTRATOR_CONCEPT_v0.2](../concepts/drafts/ORCHESTRATOR_CONCEPT_v0.2.md) | Этап 8 | Human-in-the-loop режимы A/B/C, Протокол эскалации |
 | [PROCESS_CARD_INTERPRETER_v0.2](../concepts/drafts/PROCESS_CARD_INTERPRETER_v0.2.md) | Этап 10 | IR/AST, Expression engine, Static analysis |
 | [AGENT_HUMAN_NAMES_v0.1](../concepts/drafts/AGENT_HUMAN_NAMES_v0.1.md) | Этап 4, 6 | Display Identity через Монитор |
+| [CONTEXT_MEMORY_ARCHITECTURE_v1.2](../concepts/drafts/CONTEXT_MEMORY_ARCHITECTURE_v1.2.md) | Этап 5, 9 | Memory Namespaces, Canon, Context Pack, Memory Curator |
+| [STORAGE_MEMORY_REVIEW_v1.0](../concepts/drafts/STORAGE_MEMORY_REVIEW_v1.0.md) | Этап 5, 9 | Storage vs Memory разграничение, 12-пунктов чеклист |
 
 ---
 
 **Последнее обновление**: 2025-12-19
 
-**Версия**: 2.3 (добавлены напоминалки "📝 ОБЯЗАТЕЛЬНО ПЕРЕД НАЧАЛОМ" для всех этапов)
+**Версия**: 2.4 (Этап 5 Storage полностью реализован — SQLite + fsspec, 49 тестов)

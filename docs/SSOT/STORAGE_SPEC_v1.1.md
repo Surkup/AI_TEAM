@@ -1,10 +1,11 @@
-# STORAGE Specification v1.0
+# STORAGE Specification v1.1
 
 **Статус**: ✅ Утверждено (Final Release)
-**Версия**: 1.0.0
+**Версия**: 1.1.0
 **Дата**: 2025-12-19
 **Совместимость**: MindBus Protocol v1.0, MESSAGE_FORMAT v1.1, NODE_PASSPORT v1.0
 **Базируется на**: STORAGE_ARCHITECTURE_DISCUSSION_2025-12-19 (8.8/10 экспертная оценка)
+**Обновление v1.1**: Учтены замечания экспертной ревизии (9/10 и 9.2/10)
 
 ---
 
@@ -98,6 +99,32 @@ invariant:
   definition: "All agents follow same retry/buffer/continue behavior when Storage Service is down"
   enforcement: "Shared library (src/common/storage_client.py), not per-agent implementation"
 ```
+
+#### Инвариант 7: Atomic File Placement (NEW in v1.1)
+
+```yaml
+invariant:
+  name: "Atomic File Placement"
+  definition: "temp and permanent storage MUST be on same filesystem"
+  reason: "os.rename() is atomic within same filesystem, prevents partial states"
+  recovery: "On startup, Storage Service scans for 'completed' artifacts with files still in temp → moves them"
+  enforcement: "Configuration validation, startup recovery procedure"
+```
+
+**Пояснение**: Если система упадёт между записью в БД и перемещением файла, при следующем запуске Storage Service автоматически "докатит" незавершённые операции.
+
+#### Инвариант 8: Artifact ID Uniqueness (NEW in v1.1)
+
+```yaml
+invariant:
+  name: "Artifact ID Uniqueness"
+  definition: "artifact_id MUST contain UUID to prevent collisions between agents"
+  format: "art_{uuid4}"
+  example: "art_a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  enforcement: "Pydantic pattern validation, generation helper function"
+```
+
+**Пояснение**: Использование UUID гарантирует, что два агента не создадут артефакты с одинаковыми ID.
 
 ---
 
@@ -219,12 +246,12 @@ class ArtifactContext(BaseModel):
 class ArtifactManifest(BaseModel):
     """Artifact Manifest v1.0 — SSOT для метаданных артефактов"""
 
-    # Идентификация
+    # Идентификация (обновлено в v1.1 — строгий UUID формат)
     id: str = Field(
         min_length=1,
         max_length=100,
-        pattern=r"^art_[a-zA-Z0-9_-]+$",
-        description="Уникальный ID артефакта"
+        pattern=r"^art_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
+        description="Уникальный ID артефакта (art_ + UUID4)"
     )
     version: int = Field(ge=1, description="Версия артефакта")
     supersedes: Optional[str] = Field(None, description="ID предыдущей версии")
@@ -538,7 +565,28 @@ Agent                   File Storage        Storage Service        SQLite
 | 4 | DB error | Delete temp file, return ERROR |
 | 5 | Move failed | Rollback INSERT, delete temp, return ERROR |
 
-### 5.3. Idempotency
+### 5.3. Процедура восстановления при старте (NEW in v1.1)
+
+```yaml
+startup_recovery:
+  description: "Storage Service при старте проверяет целостность данных"
+
+  steps:
+    1: "Scan SQLite for artifacts with status='completed'"
+    2: "For each artifact, check if file exists at URI"
+    3: "If file in temp/ but not in artifacts/ → move (complete interrupted operation)"
+    4: "If file missing entirely → mark artifact as 'failed', log warning"
+    5: "Scan temp/ for orphaned files older than 1 hour → move to orphans/"
+
+  implementation:
+    function: "StorageService._startup_recovery()"
+    trigger: "Called once at service startup"
+    logging: "Log all recovery actions for debugging"
+```
+
+**Пояснение**: Эта процедура гарантирует, что система восстановится после сбоя между шагами 4 и 5 транзакционного протокола.
+
+### 5.4. Idempotency
 
 ```yaml
 idempotency:
@@ -595,6 +643,14 @@ agent_degradation_behavior:
 
   buffer_location: ".data/buffer/"
   buffer_format: "{artifact_id}.json"  # manifest + content path
+
+  # NEW in v1.1: Лимиты буфера
+  buffer_limits:
+    max_size_mb: 100              # Максимальный размер буфера
+    max_items: 1000               # Максимальное количество артефактов
+    eviction_policy: "FIFO"       # При переполнении — удаляем старые первыми
+    on_limit_reached: "log_warning_and_evict"  # Логируем и освобождаем место
+    persistence_note: "Buffer directory SHOULD be mounted as persistent volume in production"
 ```
 
 ### 6.3. Orchestrator поведение
@@ -836,7 +892,29 @@ mvp_limitations:
     - "Automated GC with configurable retention"
 ```
 
-### 10.2. Garbage Collection (MVP)
+### 10.2. Безопасность файловой системы (NEW in v1.1)
+
+```yaml
+filesystem_security:
+  mvp:
+    enforcement: "Not enforced (development mode)"
+    note: "Agents can read files directly via fsspec, bypassing ACL"
+
+  production:
+    enforcement: "OS-level permissions"
+    requirements:
+      - ".data/artifacts readable only by storage-service user"
+      - "Run Storage Service as dedicated system user"
+      - "Agents access files ONLY through Storage Service API"
+
+    commands:
+      - "chmod 700 .data/artifacts"
+      - "chown storage-service:storage-service .data/artifacts"
+```
+
+**Пояснение**: В MVP агенты могут читать файлы напрямую (для простоты разработки). В production доступ к папке `.data/artifacts` должен быть ограничен на уровне операционной системы.
+
+### 10.3. Garbage Collection (MVP)
 
 ```yaml
 garbage_collection:
@@ -892,6 +970,19 @@ garbage_collection:
 
 ## 13. Changelog
 
+### v1.1.0 (2025-12-19)
+
+**Обновления по результатам экспертной ревизии (оценки 9/10 и 9.2/10):**
+
+- **NEW** Инвариант 7: Atomic File Placement — temp и permanent на одном диске
+- **NEW** Инвариант 8: Artifact ID Uniqueness — строгий UUID формат
+- **NEW** Раздел 5.3: Процедура восстановления при старте
+- **NEW** Раздел 10.2: Безопасность файловой системы (OS-level permissions)
+- **UPDATED** Pydantic schema: строгий паттерн `art_{uuid4}` для artifact_id
+- **UPDATED** Buffer limits: max_size_mb, max_items, eviction_policy
+
+**Обоснование**: Замечания экспертов касались edge cases (race conditions, buffer overflow, ID collisions), которые важны для production-ready системы.
+
 ### v1.0.0 (2025-12-19)
 
 - Initial release
@@ -910,5 +1001,7 @@ garbage_collection:
 ---
 
 *Документ подготовлен: 2025-12-19*
+*Обновлён: 2025-12-19 (v1.1)*
 *Автор: Claude Code (Opus 4.5)*
 *Основа: STORAGE_ARCHITECTURE_DISCUSSION_2025-12-19 (экспертная оценка 8.8/10)*
+*Ревизия: Экспертные оценки 9/10 и 9.2/10*

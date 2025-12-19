@@ -29,3 +29,6 @@ typing_extensions==4.15.0
 # Ready-Made First: Agent frameworks (Этап 4)
 litellm==1.80.10
 langgraph==1.0.5
+# Ready-Made First: Storage (Этап 5 - STORAGE_SPEC_v1.1)
+sqlalchemy>=2.0.0
+fsspec>=2024.0.0

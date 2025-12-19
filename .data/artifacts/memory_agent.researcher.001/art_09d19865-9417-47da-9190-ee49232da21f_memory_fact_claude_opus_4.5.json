@@ -1,0 +1,8 @@
+{
+  "key": "fact:claude_opus_4.5",
+  "value": "Claude Opus 4.5 — самая мощная модель Anthropic, выпущена в 2025",
+  "category": "fact",
+  "importance": 9,
+  "agent": "agent.researcher.001",
+  "remembered_at": "2025-12-19T11:59:59.656324"
+}
