@@ -59,7 +59,7 @@
 | **MindBus (Шина данных)** | RabbitMQ (AMQP 0-9-1) + CloudEvents v1.0 | Коммуникация между компонентами | [02_mindbus.md](02_mindbus.md) + [docs/concepts/mindbus_protocol_v1.md](../../concepts/mindbus_protocol_v1.md) |
 | **Node Management** | Node Passport + Node Registry (etcd/Consul) | Регистрация и поиск узлов по capabilities | [03_node_management.md](03_node_management.md) + [docs/SSOT/](../../SSOT/) |
 | **Интеграция с LLM** | LiteLLM | Вызовы AI-моделей | [04_llm_integration.md](04_llm_integration.md) |
-| **База данных & Хранилище** | PostgreSQL + MinIO (опционально) | Задачи, состояние, артефакты | [05_database_storage.md](05_database_storage.md) |
+| **База данных & Хранилище** | SQLite + fsspec (MVP) → PostgreSQL + MinIO (Production) | Задачи, состояние, артефакты | [05_database_storage.md](05_database_storage.md) + [STORAGE_SPEC_v1.0.md](../../SSOT/STORAGE_SPEC_v1.0.md) |
 | **Process Cards** | YAML DSL (GitHub Actions-подобный) | Декларативное описание процессов | [06_process_cards.md](06_process_cards.md) + [docs/SSOT/PROCESS_CARD_SPEC_v1.0.md](../../SSOT/PROCESS_CARD_SPEC_v1.0.md) |
 | **API фреймворк** | FastAPI | HTTP API для пользователей | [07_api_framework.md](07_api_framework.md) |
 | **Мониторинг** | OpenTelemetry + Prometheus + Grafana | Наблюдаемость системы | [08_monitoring_observability.md](08_monitoring_observability.md) |
@@ -103,12 +103,13 @@
 - ✅ Кеширование через Redis
 - 🔄 **Модульность**: Легко добавить новые модели
 
-### 6. PostgreSQL — надежная БД
-- ✅ 30+ лет в production (Apple, Instagram, Spotify)
-- ✅ ACID гарантии
-- ✅ JSONB для гибкости
-- ✅ Упрощенная схема для MVP (начинаем с 1-2 таблиц)
-- 🔄 **Модульность**: Можно заменить на MySQL, MongoDB, или SQLite
+### 6. Трёхуровневое хранилище — Ready-Made First
+- ✅ **Agent State**: LangGraph Checkpointer (0 строк своего кода)
+- ✅ **Process State**: SQLite + SQLAlchemy (MVP) → PostgreSQL (Production)
+- ✅ **Artifacts**: fsspec + SQLite (MVP) → MinIO + PostgreSQL (Production)
+- ✅ Storage Service как участник MindBus
+- ✅ Artifact Manifest v1.0 с AI Context
+- 🔄 **Модульность**: SQLite → PostgreSQL, Local FS → S3/MinIO (одна строка конфига)
 
 ---
 
@@ -309,4 +310,4 @@ Docker Compose (контейнеры)
 ---
 
 **Статус:** ✅ УТВЕРЖДЕНО
-**Последнее обновление**: 2025-12-17
+**Последнее обновление**: 2025-12-19

@@ -591,10 +591,465 @@ artifact:
 
 ---
 
-**Статус:** Готов к обсуждению с коллегами
-**Следующий шаг:** После утверждения → STORAGE_SPEC_v1.0.md
+## 10. Обратная связь коллег (Раунд 2)
+
+После первоначального обсуждения коллеги предоставили дополнительные критические замечания.
+
+### 10.1. Коллега 1: Транзакционность и контракты
+
+**Проблема 1: Два "источника правды" без строгого контракта**
+> "Файловое хранилище и метаданные могут разойтись. Если файл записался, а метаданные нет — система в inconsistent state."
+
+**Решение:** Транзакционный протокол с чётким "commit point":
+```
+1. Agent → upload(file) → Storage (файл ещё НЕ видим)
+2. Agent → register(artifact_manifest) → Storage Service
+3. Storage Service: validate(file_exists + checksum_match)
+4. Storage Service: INSERT INTO artifacts → COMMIT POINT
+5. Storage Service → "artifact_registered" → Agent
+
+Если шаг 3 или 4 падает → файл удаляется, агенту возвращается ошибка
+```
+
+**Проблема 2: Нужны правила retry**
+> "Что делать если register упал? Повторять upload? Только register?"
+
+**Решение:** Idempotency by artifact_id + checksum:
+- Если артефакт с таким ID и checksum уже есть → "already_exists" (OK)
+- Если ID есть, но checksum другой → ошибка "conflict"
+- Если ID нет → нормальная регистрация
+
+**Проблема 3: SQLite single-writer — архитектурный инвариант**
+> "Если это ограничение, оно должно быть явно задокументировано как архитектурное решение."
+
+**Решение:** Добавить в STORAGE_SPEC:
+```yaml
+architectural_invariants:
+  - name: "Single Writer Pattern"
+    description: "Only Storage Service writes to SQLite. Agents NEVER access DB directly."
+    reason: "SQLite single-writer limitation + separation of concerns"
+    enforcement: "Code review, no DB credentials for agents"
+```
+
+**Проблема 4: Artifact Manifest должен быть immutable-first**
+> "Запретить изменение metadata после создания. Для 'исправлений' — новая версия."
+
+**Решение:**
+- `status`: может измениться `uploading → completed` (один раз)
+- Все остальные поля: immutable
+- Для изменений: создать новую версию с `supersedes: old_id`
+
+**Проблема 5: Где проверять ACL?**
+> "visibility: trace — кто проверяет? Storage Service или каждый агент?"
+
+**Решение:** Storage Service — единственное место проверки ACL:
+```python
+def get_artifact(artifact_id, requester_id, requester_trace_id):
+    artifact = db.get(artifact_id)
+
+    if artifact.visibility == "private":
+        assert requester_id == artifact.owner
+    elif artifact.visibility == "trace":
+        assert requester_trace_id == artifact.trace_id
+    # public — всегда OK
+```
+
+**Проблема 6: Прямой fsspec доступ vs presigned URLs**
+> "Для MVP ОК, но отметить что это временное решение. В production — presigned URLs для security."
+
+**Решение:** Добавить в документ:
+```yaml
+mvp_limitations:
+  - "Direct fsspec access (no presigned URLs)"
+  - "File-level ACL not enforced at storage layer"
+  - "Production: switch to presigned URLs with expiration"
+```
+
+### 10.2. Коллега 2: Метаданные и Garbage Collection
+
+**Проблема 1: Нужно поле `context` для AI-специфичных метаданных**
+> "Артефакт создан LLM — важно знать prompt_version, model_name, temperature, etc."
+
+**Решение:** Добавить в Artifact Manifest:
+```yaml
+artifact:
+  # ... existing fields ...
+
+  context:  # NEW
+    prompt_version: "1.2.0"
+    model_name: "gpt-4o-mini"
+    model_params:
+      temperature: 0.7
+      max_tokens: 4000
+    input_artifacts:
+      - "art_research_001"  # зависимости
+    execution_time_ms: 3500
+```
+
+**Проблема 2: Где хранить SQLite?**
+> "Рекомендую `.data/storage.db` — не в корне, не в `data/`, а в `.data/` (скрытая папка, не попадает в git случайно)."
+
+**Решение:** Принято. Добавить в конфиг:
+```yaml
+storage_service:
+  database:
+    path: ".data/storage.db"
+    # легко переопределить через env: STORAGE_DB_PATH
+```
+
+**Проблема 3: Retention policy для MVP**
+> "Для MVP: infinite (не удалять). Явно задокументировать что GC не реализован."
+
+**Решение:**
+```yaml
+retention:
+  mvp: "infinite"  # No auto-deletion
+  future: "configurable per artifact_type"
+
+garbage_collection:
+  mvp: "manual only"
+  future: "background job"
+```
+
+**Проблема 4: Нужна sequence diagram для error handling**
+> "Покажи что происходит когда Storage Service недоступен."
+
+**Решение:** Добавить диаграмму:
+```
+Agent                   Storage           Storage Service
+  |                       |                      |
+  |--1. upload(file)----->|                      |
+  |<--OK + uri------------|                      |
+  |                       |                      |
+  |--2. register(uri)-------------------------->|
+  |                       |                      X (SERVICE DOWN)
+  |<--ERROR: service_unavailable----------------|
+  |                       |                      |
+  |--3. RETRY (exp backoff)-------------------->|
+  |                       |                      |
+  |                       |                      ✓ (SERVICE UP)
+  |<--OK: artifact_registered-------------------|
+
+После N retries:
+  - Agent сохраняет артефакт в local buffer
+  - Продолжает работу (graceful degradation)
+  - Retry регистрации при следующем heartbeat
+```
+
+**Проблема 5: Garbage Collection для orphaned файлов**
+> "Файл загружен, но register не вызван → orphan. Нужен механизм очистки."
+
+**Решение:**
+```yaml
+garbage_collection:
+  orphan_detection:
+    - "Files older than 24h without manifest entry"
+    - "Run daily (cron or background job)"
+    - "MVP: manual script, not automated"
+
+  orphan_handling:
+    - "Move to .data/orphans/ (not delete immediately)"
+    - "Keep for 7 days, then delete"
+    - "Log for debugging"
+```
+
+---
+
+## 11. Обновлённый Artifact Manifest v0.2
+
+С учётом обратной связи:
+
+```yaml
+artifact:
+  # === Идентификация ===
+  id: "art_abc123"                    # Уникальный ID
+  version: 1                          # Версия артефакта
+  supersedes: null                    # ID предыдущей версии (для изменений)
+
+  # === Связь с процессом ===
+  trace_id: "trace_xyz"
+  step_id: "research"
+  created_by: "agent.researcher.001"
+  created_at: "2025-12-19T10:00:00Z"
+
+  # === Типизация ===
+  artifact_type: "research_report"
+  content_type: "application/json"
+
+  # === Расположение ===
+  uri: "file:///.data/artifacts/trace_xyz/research_v1.json"
+  size_bytes: 15234
+  checksum: "sha256:abc123..."
+
+  # === Жизненный цикл ===
+  status: "completed"                 # uploading → completed (one-way)
+  retention: "infinite"               # MVP: no auto-deletion
+
+  # === Безопасность ===
+  owner: "agent.researcher.001"
+  visibility: "trace"                 # trace | private | public
+
+  # === AI Context (NEW) ===
+  context:
+    prompt_version: "1.2.0"
+    model_name: "gpt-4o-mini"
+    model_params:
+      temperature: 0.7
+      max_tokens: 4000
+    input_artifacts:                  # Dependencies
+      - "art_previous_001"
+    execution_time_ms: 3500
+```
+
+**Правила immutability:**
+- `status`: можно изменить `uploading → completed` (один раз)
+- Все остальные поля: **IMMUTABLE после создания**
+- Для "исправления" артефакта: создать новый с `supersedes: old_id`
+
+---
+
+## 12. Обновлённые требования для STORAGE_SPEC
+
+После обсуждения добавить в спецификацию:
+
+### 12.1. Транзакционный протокол
+
+```yaml
+storage_operations:
+  upload_and_register:
+    steps:
+      1: "upload(file) → temporary storage"
+      2: "register(manifest) → Storage Service"
+      3: "Storage Service: validate(file_exists, checksum_match)"
+      4: "Storage Service: INSERT manifest → COMMIT"
+      5: "move file from temp → permanent location"
+      6: "return: artifact_registered"
+
+    on_failure:
+      step_3_4: "delete temp file, return error"
+      step_5: "rollback INSERT, delete temp file, return error"
+```
+
+### 12.2. Idempotency
+
+```yaml
+idempotency:
+  by: "artifact_id + checksum"
+
+  scenarios:
+    same_id_same_checksum: "return: already_exists (OK)"
+    same_id_diff_checksum: "return: conflict_error"
+    new_id: "normal registration"
+```
+
+### 12.3. Degradation Behavior
+
+```yaml
+degradation:
+  storage_service_down:
+    agent_behavior:
+      - "Retry with exponential backoff (max 3 attempts)"
+      - "Buffer artifact locally (.data/buffer/)"
+      - "Continue execution (graceful degradation)"
+      - "Retry registration on next heartbeat"
+
+    orchestrator_behavior:
+      - "Mark step as 'pending_storage'"
+      - "Don't block process if non-critical"
+      - "Alert if critical artifact missing"
+```
+
+### 12.4. Архитектурные инварианты
+
+```yaml
+architectural_invariants:
+  single_writer:
+    description: "Only Storage Service writes to SQLite"
+    enforcement: "Code review, no DB credentials for agents"
+
+  acl_enforcement:
+    description: "Storage Service is the ONLY ACL checkpoint"
+    enforcement: "All reads go through get_artifact()"
+
+  immutable_manifests:
+    description: "Artifact metadata immutable after creation"
+    exception: "status: uploading → completed"
+```
+
+### 12.5. MVP Limitations
+
+```yaml
+mvp_limitations:
+  documented:
+    - "Direct fsspec access (no presigned URLs)"
+    - "File-level ACL not enforced at storage layer"
+    - "No automated garbage collection"
+    - "SQLite single-writer constraint"
+    - "Infinite retention (no auto-deletion)"
+
+  production_upgrade:
+    - "Presigned URLs with expiration"
+    - "PostgreSQL for metadata"
+    - "MinIO for files"
+    - "Automated GC with configurable retention"
+```
+
+---
+
+## 13. Итоговая оценка (обновлённая)
+
+| Критерий | Оценка | Изменение | Обоснование |
+|----------|--------|-----------|-------------|
+| **Соответствие принципам** | 9/10 | — | SSOT (Artifact Manifest v0.2), Zero Hardcoding, Ready-Made |
+| **Гармония с архитектурой** | 9/10 | — | Storage Service как участник MindBus |
+| **Простота и надёжность** | 9/10 | ↑ | Транзакционный протокол, idempotency, degradation rules |
+| **Эффективность** | 8/10 | — | Pointer not payload, локальный SQLite |
+| **Ready-Made Solutions** | 9/10 | — | langgraph-checkpoint, fsspec, SQLAlchemy |
+| **Общая оценка** | **8.8/10** | ↑ | Учтены все критические замечания |
+
+---
+
+## 14. Финальная экспертная оценка (Раунд 3)
+
+### 14.1. Вердикт экспертов
+
+> **"Это уже не 'поиск идей', а почти готовый дизайн для SSOT-спеки."**
+
+Архитектура признана **зрелой и готовой к реализации**. Оценка: **8.5–9/10**.
+
+### 14.2. Подтверждённые сильные стороны
+
+| Решение | Почему правильно |
+|---------|------------------|
+| **Storage Service как участник MindBus** | Убирает связанность агентов с БД/ФС, позволяет менять бэкенды |
+| **"Pointer, not Payload"** | Избежали будущего краша системы от перегрузки RabbitMQ |
+| **Трёхуровневая модель** | Разделение по природе данных, а не "одна БД на всё" |
+| **Artifact Manifest + immutability** | Воспроизводимость, дебаг, time-travel |
+| **Честные MVP-ограничения** | Признак зрелости: документируем, не маскируем |
+
+### 14.3. Ключевые точки для STORAGE_SPEC
+
+Эксперты выделили три **обязательных инварианта** для спецификации:
+
+#### 1. Транзакционный протокол как SSOT-инвариант
+
+> **"В какой момент артефакт считается сохранённым?"**
+
+Ответ: **Commit Point = INSERT в SQLite после валидации файла**.
+
+```yaml
+# MUST be in STORAGE_SPEC_v1.0.md
+invariant:
+  name: "Artifact Commit Point"
+  definition: "Artifact exists IFF manifest record in SQLite is committed"
+  consequence: "File without manifest = orphan (GC candidate)"
+```
+
+#### 2. Immutability как обязательное правило
+
+```yaml
+invariant:
+  name: "Artifact Immutability"
+  definition: "Manifest fields immutable after creation (except status)"
+  consequence: "For corrections → create new version with supersedes"
+```
+
+#### 3. Единая политика деградации
+
+> **"Поведение при деградации должно быть одинаковым у всех агентов"**
+
+```yaml
+invariant:
+  name: "Uniform Degradation Policy"
+  definition: "All agents follow same retry/buffer/continue behavior"
+  enforcement: "Shared library, not per-agent implementation"
+```
+
+### 14.4. Ценность поля `context`
+
+Эксперты особо отметили добавление AI-контекста:
+
+| Поле | Ценность |
+|------|----------|
+| `prompt_version` | Понять, почему агент стал работать хуже после обновления |
+| `model_name` | Считать стоимость, сравнивать качество между LLM |
+| `execution_time_ms` | Искать "узкие места" (Performance Bottlenecks) |
+| `input_artifacts` | Граф зависимостей для воспроизводимости |
+
+### 14.5. Graceful Degradation — страховка инвестиций
+
+> **"ИИ-агенты работают долго. Будет катастрофой, если агент потратил 3 минуты и 5$ на токены, а потом всё удалил из-за моргнувшей БД."**
+
+Локальный буфер (`.data/buffer/`) — страховка инвестиций в токены.
+
+### 14.6. Визуализация итоговой иерархии
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    ИЕРАРХИЯ ХРАНЕНИЯ                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  AGENT STATE (LangGraph)                                    │
+│  └── Внутренние мысли агента (Memory)                       │
+│      • Итерации самокритики                                 │
+│      • Промежуточные состояния графа                        │
+│                                                             │
+│  PROCESS STATE (SQLAlchemy)                                 │
+│  └── План работ (To-Do List)                                │
+│      • Какой шаг выполнен                                   │
+│      • Статус процесса                                      │
+│                                                             │
+│  ARTIFACTS (fsspec + SQLite)                                │
+│  └── Результаты работы (Portfolio)                          │
+│      • Исследования, идеи, тексты                           │
+│      • Версионирование через supersedes                     │
+│      • AI-контекст для воспроизводимости                    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 15. Заключение
+
+### 15.1. Статус документа
+
+| Аспект | Статус |
+|--------|--------|
+| Архитектурное решение | ✅ **УТВЕРЖДЕНО** |
+| Технологии | ✅ **ВЫБРАНЫ** (LangGraph, fsspec, SQLAlchemy) |
+| Паттерны | ✅ **ОПРЕДЕЛЕНЫ** (Pointer not Payload, Commit Point, Immutability) |
+| Инварианты | ✅ **СФОРМУЛИРОВАНЫ** |
+| MVP-ограничения | ✅ **ЗАДОКУМЕНТИРОВАНЫ** |
+
+### 15.2. Финальная оценка
+
+| Критерий | Оценка |
+|----------|--------|
+| Соответствие принципам проекта | 9/10 |
+| Гармония с архитектурой | 9/10 |
+| Простота и надёжность | 9/10 |
+| Эффективность | 8/10 |
+| Ready-Made Solutions | 9/10 |
+| **Общая оценка** | **8.8/10** |
+
+### 15.3. Следующие шаги
+
+1. **STORAGE_SPEC_v1.0.md** — формальная SSOT-спецификация
+   - Pydantic-схемы для Artifact Manifest v0.2
+   - SQLAlchemy-модель для таблицы `artifacts`
+   - API Storage Service (actions, params, results)
+   - Retry-логика (tenacity)
+
+2. **Реализация** — согласно плану из §6
+
+---
+
+**Статус:** ✅ АРХИТЕКТУРА УТВЕРЖДЕНА
+**Следующий шаг:** Создание STORAGE_SPEC_v1.0.md
 
 ---
 
 *Документ подготовлен: 2025-12-19*
 *Автор: Claude Code (Opus 4.5)*
+*Финальное обновление: 2025-12-19 (Экспертная оценка, Раунд 3)*

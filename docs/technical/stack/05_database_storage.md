@@ -1,468 +1,259 @@
-# Database & Storage: PostgreSQL + MinIO
+# Database & Storage: Трёхуровневая архитектура
 
-
----
-
-# ⚠️ ЧЕРНОВИК — ТРЕБУЕТ ПРОВЕРКИ ⚠️
-
-**Этот документ НЕ является финальным решением!**
-
-Требуется детальный анализ, критика и проверка перед принятием решений.
-
----
-## Решение
-
-**Выбрано:**
-- **PostgreSQL** — для structured data (задачи, состояния, метрики)
-- **MinIO** — для artifacts (тексты, файлы, результаты работы агентов)
+**Статус:** ✅ УТВЕРЖДЕНО
+**Последнее обновление:** 2025-12-19
+**SSOT:** [STORAGE_SPEC_v1.0.md](../../SSOT/STORAGE_SPEC_v1.0.md)
 
 ---
 
-## PostgreSQL: State & Metadata
+## TL;DR
 
-### Почему PostgreSQL?
+**Принцип:** Ready-Made Solutions First
 
-**1. Battle-tested реляционная БД**
-- ✅ 30+ лет в production
-- ✅ ACID транзакции
-- ✅ Богатые типы данных (JSONB, Arrays, UUID)
-- ✅ Отличная производительность
+**Выбранный стек:**
+- **Agent State** → LangGraph Checkpointer (SqliteSaver)
+- **Process State** → SQLite + SQLAlchemy
+- **Artifacts** → fsspec (файлы) + SQLite (метаданные)
 
-**2. JSONB для гибкости**
-```sql
--- Таблица tasks с JSONB payload
-CREATE TABLE tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    trace_id TEXT NOT NULL,
-    status TEXT NOT NULL,  -- pending, in_progress, completed, failed
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    config JSONB NOT NULL,  -- Конфигурация задачи
-    metadata JSONB,  -- Произвольные метаданные
-    result_artifact_url TEXT  -- Ссылка на MinIO
-);
+**MVP → Production путь:**
+- SQLite → PostgreSQL (одна строка конфига)
+- Local FS → MinIO/S3 (одна строка конфига через fsspec)
 
--- Индексы для быстрого поиска
-CREATE INDEX idx_tasks_trace_id ON tasks(trace_id);
-CREATE INDEX idx_tasks_status ON tasks(status);
-CREATE INDEX idx_tasks_created_at ON tasks(created_at DESC);
+---
 
--- JSONB индексы для поиска по метаданным
-CREATE INDEX idx_tasks_metadata ON tasks USING gin(metadata);
+## Трёхуровневая архитектура хранения
+
 ```
-
-**3. Сложные запросы**
-```sql
--- Найти все задачи с quality_score > 8
-SELECT * FROM tasks
-WHERE metadata->>'quality_score' > '8'
-AND status = 'completed';
-
--- Статистика по агентам
-SELECT
-    config->>'agent' as agent_name,
-    COUNT(*) as total_tasks,
-    AVG((metadata->>'quality_score')::float) as avg_quality
-FROM tasks
-WHERE status = 'completed'
-GROUP BY agent_name;
+┌─────────────────────────────────────────────────────────────┐
+│                    УРОВНИ ХРАНЕНИЯ                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  УРОВЕНЬ 1: AGENT STATE                                     │
+│  ─────────────────────                                      │
+│  Что: Состояние агента между итерациями самокритики        │
+│  Технология: LangGraph Checkpointer (SqliteSaver)          │
+│  Готовое решение: ✅ langgraph-checkpoint                   │
+│  Свой код: 0 строк                                          │
+│                                                             │
+│  УРОВЕНЬ 2: PROCESS STATE                                   │
+│  ────────────────────────                                   │
+│  Что: Статус процесса, какой шаг выполнен                  │
+│  Технология: SQLite через SQLAlchemy                        │
+│  Готовое решение: ✅ SQLAlchemy                             │
+│  Свой код: ~100 строк (модели + CRUD)                       │
+│                                                             │
+│  УРОВЕНЬ 3: ARTIFACTS                                       │
+│  ────────────────────                                       │
+│  Что: Результаты работы агентов (тексты, файлы)            │
+│  Технология: fsspec (файлы) + SQLite (метаданные)          │
+│  Готовое решение: ✅ fsspec, ✅ SQLAlchemy                  │
+│  Свой код: ~300 строк (Storage Service handlers)            │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### Схема базы данных (MVP)
+## Технологии
 
-```sql
--- Задачи
-CREATE TABLE tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    trace_id TEXT NOT NULL,
-    user_id TEXT,  -- Кто создал задачу
-    status TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    config JSONB NOT NULL,  -- { "type": "write_article", "topic": "...", ... }
-    metadata JSONB,  -- { "quality_score": 8.5, "iterations": 3, "cost": 0.12 }
-    result_artifact_url TEXT,  -- minio://artifacts/task-123/result.txt
-    error_message TEXT
-);
+### MVP (Zero Config)
 
--- Сообщения (для истории, опционально)
-CREATE TABLE messages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    trace_id TEXT NOT NULL,
-    message_type TEXT NOT NULL,  -- COMMAND, RESULT, EVENT
-    from_agent TEXT NOT NULL,
-    to_agent TEXT NOT NULL,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    payload JSONB NOT NULL
-);
+| Компонент | Технология | Почему |
+|-----------|------------|--------|
+| Agent State | LangGraph SqliteSaver | Уже интегрирован в LangGraph |
+| Metadata DB | SQLite + SQLAlchemy | Zero-config, файловая БД |
+| File Storage | Local FS через fsspec | Zero-config, работает везде |
 
--- Артефакты (метаданные)
-CREATE TABLE artifacts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    trace_id TEXT NOT NULL,
-    agent_name TEXT NOT NULL,
-    artifact_type TEXT NOT NULL,  -- article, critique, image, etc.
-    storage_url TEXT NOT NULL,  -- minio://artifacts/...
-    size_bytes BIGINT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    metadata JSONB
-);
+### Production (Scale)
 
--- Метрики агентов
-CREATE TABLE agent_metrics (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    agent_name TEXT NOT NULL,
-    metric_name TEXT NOT NULL,  -- llm_calls, tokens_used, avg_latency, etc.
-    value FLOAT NOT NULL,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    labels JSONB  -- { "model": "gpt-4", "trace_id": "..." }
-);
+| Компонент | Технология | Почему |
+|-----------|------------|--------|
+| Agent State | LangGraph PostgresSaver | Масштабируемость |
+| Metadata DB | PostgreSQL + SQLAlchemy | ACID, concurrent writes |
+| File Storage | MinIO через fsspec | S3-compatible, self-hosted |
 
--- Индексы
-CREATE INDEX idx_messages_trace_id ON messages(trace_id);
-CREATE INDEX idx_artifacts_trace_id ON artifacts(trace_id);
-CREATE INDEX idx_agent_metrics_name_time ON agent_metrics(agent_name, timestamp DESC);
-```
-
----
-
-## MinIO: Artifact Storage
-
-### Почему MinIO?
-
-**1. S3-compatible object storage**
-- ✅ Полная совместимость с AWS S3 API
-- ✅ Self-hosted (не зависим от AWS)
-- ✅ Легкий и быстрый
-
-**2. Простой deployment**
-```bash
-# Docker Compose
-docker run -p 9000:9000 -p 9001:9001 \
-  -e "MINIO_ROOT_USER=admin" \
-  -e "MINIO_ROOT_PASSWORD=password" \
-  minio/minio server /data --console-address ":9001"
-```
-
-**3. Bucket structure**
-```
-minio://
-  └── ai-team-artifacts/
-      ├── tasks/
-      │   └── task-{trace_id}/
-      │       ├── input.json
-      │       ├── draft_v1.txt
-      │       ├── critique_v1.json
-      │       ├── draft_v2.txt
-      │       └── final_result.txt
-      └── agent-outputs/
-          ├── writer/
-          ├── critic/
-          └── editor/
-```
-
----
-
-### Код для работы с MinIO
-
+**Переход MVP → Production:**
 ```python
-from minio import Minio
-from typing import BinaryIO, Optional
-import json
+# MVP
+saver = SqliteSaver.from_conn_string(".data/checkpoints.db")
+fs = fsspec.filesystem("file")
 
-class ArtifactStorage:
-    """Сервис для работы с артефактами в MinIO"""
-
-    def __init__(self, endpoint: str, access_key: str, secret_key: str):
-        self.client = Minio(
-            endpoint,
-            access_key=access_key,
-            secret_key=secret_key,
-            secure=False  # True для production с HTTPS
-        )
-        self.bucket = "ai-team-artifacts"
-
-        # Создаем bucket если не существует
-        if not self.client.bucket_exists(self.bucket):
-            self.client.make_bucket(self.bucket)
-
-    def save_artifact(
-        self,
-        trace_id: str,
-        artifact_name: str,
-        content: str | bytes | BinaryIO,
-        content_type: str = "text/plain"
-    ) -> str:
-        """
-        Сохраняет артефакт.
-
-        Returns: URL артефакта
-        """
-        object_name = f"tasks/{trace_id}/{artifact_name}"
-
-        # Конвертируем строку в bytes если нужно
-        if isinstance(content, str):
-            content = content.encode('utf-8')
-            length = len(content)
-            from io import BytesIO
-            content = BytesIO(content)
-        elif isinstance(content, bytes):
-            length = len(content)
-            from io import BytesIO
-            content = BytesIO(content)
-        else:
-            # Файл
-            content.seek(0, 2)  # Конец файла
-            length = content.tell()
-            content.seek(0)  # Начало файла
-
-        # Сохраняем
-        self.client.put_object(
-            bucket_name=self.bucket,
-            object_name=object_name,
-            data=content,
-            length=length,
-            content_type=content_type
-        )
-
-        return f"minio://{self.bucket}/{object_name}"
-
-    def get_artifact(self, url: str) -> bytes:
-        """Получает артефакт по URL"""
-        # url = "minio://ai-team-artifacts/tasks/trace-123/result.txt"
-        parts = url.replace("minio://", "").split("/", 1)
-        bucket = parts[0]
-        object_name = parts[1]
-
-        response = self.client.get_object(bucket, object_name)
-        data = response.read()
-        response.close()
-        response.release_conn()
-
-        return data
-
-    def save_json_artifact(self, trace_id: str, name: str, data: dict) -> str:
-        """Сохраняет JSON артефакт"""
-        json_str = json.dumps(data, indent=2, ensure_ascii=False)
-        return self.save_artifact(
-            trace_id=trace_id,
-            artifact_name=name,
-            content=json_str,
-            content_type="application/json"
-        )
-
-    def get_json_artifact(self, url: str) -> dict:
-        """Получает JSON артефакт"""
-        data = self.get_artifact(url)
-        return json.loads(data.decode('utf-8'))
+# Production (меняем 2 строки)
+saver = PostgresSaver.from_conn_string(os.environ["DATABASE_URL"])
+fs = fsspec.filesystem("s3", endpoint_url=os.environ["MINIO_URL"])
 ```
 
 ---
 
-### Использование в Agent
+## Artifact Manifest v1.0
 
-```python
-class WriterAgent(Agent):
-    def __init__(
-        self,
-        config: AgentConfig,
-        mindbus: MindBus,
-        llm_service: LLMService,
-        storage: ArtifactStorage,
-        db: DatabaseService
-    ):
-        super().__init__(config, mindbus)
-        self.llm_service = llm_service
-        self.storage = storage
-        self.db = db
+Каждый артефакт имеет стандартизированные метаданные:
 
-    async def execute(self, task: dict, context: dict, trace_id: str) -> dict:
-        # Генерируем статью
-        result = await self.llm_service.complete(
-            messages=[...],
-            trace_id=trace_id
-        )
+```yaml
+artifact:
+  # Идентификация
+  id: "art_abc123"                    # Уникальный ID
+  version: 1                          # Версия
+  supersedes: null                    # ID предыдущей версии
 
-        article = result["content"]
+  # Связь с процессом
+  trace_id: "trace_xyz"               # ID процесса
+  step_id: "research"                 # ID шага
+  created_by: "agent.researcher.001"  # ID создателя
+  created_at: "2025-12-19T10:00:00Z"  # Время создания
 
-        # Сохраняем артефакт в MinIO
-        artifact_url = self.storage.save_artifact(
-            trace_id=trace_id,
-            artifact_name=f"draft_{context.get('iteration', 1)}.txt",
-            content=article,
-            content_type="text/plain"
-        )
+  # Типизация
+  artifact_type: "research_report"    # Тип артефакта
+  content_type: "application/json"    # MIME type
 
-        # Сохраняем метаданные в PostgreSQL
-        await self.db.save_artifact_metadata(
-            trace_id=trace_id,
-            agent_name=self.config.name,
-            artifact_type="article_draft",
-            storage_url=artifact_url,
-            size_bytes=len(article.encode('utf-8')),
-            metadata={
-                "iteration": context.get("iteration", 1),
-                "model": result["model"],
-                "tokens": result["tokens"],
-                "cost": result["cost"]
-            }
-        )
+  # Расположение
+  uri: "file:///.data/artifacts/trace_xyz/research_v1.json"
+  size_bytes: 15234
+  checksum: "sha256:abc123..."
 
-        return {
-            "artifact_url": artifact_url,
-            "metadata": result["metadata"]
-        }
+  # Жизненный цикл
+  status: "completed"                 # uploading → completed
+  retention: "infinite"               # MVP: no auto-deletion
+
+  # Безопасность
+  owner: "agent.researcher.001"
+  visibility: "trace"                 # trace | private | public
+
+  # AI Context (для воспроизводимости)
+  context:
+    prompt_version: "1.2.0"
+    model_name: "gpt-4o-mini"
+    model_params:
+      temperature: 0.7
+    input_artifacts: ["art_previous"]
+    execution_time_ms: 3500
+```
+
+**Полная Pydantic-схема:** см. [STORAGE_SPEC_v1.0.md §3.3](../../SSOT/STORAGE_SPEC_v1.0.md)
+
+---
+
+## Storage Service
+
+Storage Service — участник MindBus (nodeType: storage).
+
+### API (через MindBus COMMAND/RESULT)
+
+| Action | Описание |
+|--------|----------|
+| `register_artifact` | Зарегистрировать артефакт |
+| `get_artifact` | Получить артефакт по ID |
+| `list_artifacts` | Список артефактов (фильтры: trace_id, type) |
+| `get_artifact_uri` | Получить URI для загрузки |
+| `delete_artifact` | Удалить артефакт (admin only) |
+
+### Архитектурные инварианты
+
+```yaml
+invariants:
+  - name: "Artifact Commit Point"
+    rule: "Artifact exists IFF manifest in SQLite is committed"
+
+  - name: "Artifact Immutability"
+    rule: "Manifest immutable after creation (except status)"
+
+  - name: "Pointer, not Payload"
+    rule: "MindBus carries only metadata/URIs, never file content"
+
+  - name: "Single Writer Pattern"
+    rule: "Only Storage Service writes to SQLite"
+
+  - name: "ACL Enforcement Point"
+    rule: "Storage Service is the ONLY ACL checkpoint"
+```
+
+---
+
+## Структура директорий
+
+```
+.data/
+├── artifacts/                    # Зарегистрированные артефакты
+│   ├── trace_xyz/
+│   │   ├── research_v1.json
+│   │   └── draft_v2.txt
+│   └── trace_abc/
+│       └── final_v1.txt
+├── buffer/                       # Буфер при недоступности Storage Service
+├── temp/                         # Временные файлы (до регистрации)
+├── orphans/                      # Orphaned files (для GC)
+└── storage.db                    # SQLite база метаданных
 ```
 
 ---
 
 ## Почему НЕ другие варианты?
 
-### MongoDB
-**Почему НЕТ:**
-- ❌ Нам не нужна schema-less (у нас есть Pydantic для SSOT)
-- ❌ PostgreSQL JSONB дает ту же гибкость
-- ❌ PostgreSQL лучше для аналитических запросов
-- ❌ Еще одна база данных (PostgreSQL уже выбран)
+### ❌ MLflow
+- Overkill для нашего use case
+- Другая модель данных (ML experiments vs Agent artifacts)
+- Требует отдельного сервера
 
-### MySQL
-**Почему НЕТ:**
-- ❌ Слабее JSONB support vs PostgreSQL
-- ❌ Меньше advanced типов данных
-- ❌ PostgreSQL более feature-rich
+### ❌ MongoDB
+- PostgreSQL JSONB даёт ту же гибкость
+- SQLite проще для MVP
+- Нет преимуществ для нашего use case
 
-### AWS S3 (вместо MinIO)
-**Почему НЕТ для MVP:**
-- ❌ Зависимость от AWS
-- ❌ Стоимость (egress fees)
-- ✅ **Но**: MinIO S3-compatible → легко мигрировать позже
+### ❌ Redis для State
+- Не нужен (агенты не требуют микросекундных задержек)
+- LangGraph Checkpointer уже решает проблему
+
+### ❌ Прямой SQL в агентах
+- Нарушает изоляцию
+- Связывает агентов с бэкендом
+- Storage Service — единственная точка доступа
 
 ---
 
-## Database Service (Python wrapper)
+## Degradation Behavior
 
-```python
-from typing import Optional, Dict, Any
-import asyncpg
-from uuid import UUID
-import json
+### Когда Storage Service недоступен
 
-class DatabaseService:
-    """Сервис для работы с PostgreSQL"""
+```yaml
+agent_behavior:
+  1: "Retry with exponential backoff (5s, 10s, 20s)"
+  2: "max_retries: 3"
+  3: "After max_retries: buffer artifact to .data/buffer/"
+  4: "Continue execution (graceful degradation)"
+  5: "Retry registration on next heartbeat"
+```
 
-    def __init__(self, connection_string: str):
-        self.connection_string = connection_string
-        self.pool: Optional[asyncpg.Pool] = None
+**Почему важно:** ИИ-агенты работают долго (минуты). Потеря 3 минут работы и $5 токенов из-за "моргнувшей БД" — недопустима. Локальный буфер — страховка инвестиций.
 
-    async def connect(self):
-        """Создает connection pool"""
-        self.pool = await asyncpg.create_pool(self.connection_string)
+---
 
-    async def create_task(
-        self,
-        trace_id: str,
-        config: Dict[str, Any],
-        user_id: Optional[str] = None
-    ) -> UUID:
-        """Создает новую задачу"""
-        async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                INSERT INTO tasks (trace_id, user_id, status, config)
-                VALUES ($1, $2, 'pending', $3)
-                RETURNING id
-                """,
-                trace_id,
-                user_id,
-                json.dumps(config)
-            )
-            return row['id']
+## Связанные документы
 
-    async def update_task_status(
-        self,
-        trace_id: str,
-        status: str,
-        metadata: Optional[Dict] = None,
-        result_url: Optional[str] = None
-    ):
-        """Обновляет статус задачи"""
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE tasks
-                SET status = $2,
-                    metadata = COALESCE($3, metadata),
-                    result_artifact_url = COALESCE($4, result_artifact_url),
-                    updated_at = NOW()
-                WHERE trace_id = $1
-                """,
-                trace_id,
-                status,
-                json.dumps(metadata) if metadata else None,
-                result_url
-            )
+- **[STORAGE_SPEC_v1.0.md](../../SSOT/STORAGE_SPEC_v1.0.md)** — полная SSOT спецификация
+- **[STORAGE_ARCHITECTURE_DISCUSSION](../../concepts/drafts/STORAGE_ARCHITECTURE_DISCUSSION_2025-12-19.md)** — протокол обсуждения
+- **[AGENT_SPEC_v1.0.md](../../SSOT/AGENT_SPEC_v1.0.md)** — интеграция с агентами
 
-    async def get_task(self, trace_id: str) -> Optional[Dict]:
-        """Получает задачу по trace_id"""
-        async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM tasks WHERE trace_id = $1",
-                trace_id
-            )
-            if row:
-                return dict(row)
-            return None
+---
 
-    async def save_artifact_metadata(
-        self,
-        trace_id: str,
-        agent_name: str,
-        artifact_type: str,
-        storage_url: str,
-        size_bytes: int,
-        metadata: Optional[Dict] = None
-    ):
-        """Сохраняет метаданные артефакта"""
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO artifacts (trace_id, agent_name, artifact_type, storage_url, size_bytes, metadata)
-                VALUES ($1, $2, $3, $4, $5, $6)
-                """,
-                trace_id,
-                agent_name,
-                artifact_type,
-                storage_url,
-                size_bytes,
-                json.dumps(metadata) if metadata else None
-            )
+## MVP Limitations
+
+```yaml
+documented:
+  - "Direct fsspec access (no presigned URLs)"
+  - "File-level ACL not enforced at storage layer"
+  - "No automated garbage collection"
+  - "SQLite single-writer constraint"
+  - "Infinite retention (no auto-deletion)"
+  - "Local filesystem only (no S3/MinIO)"
+
+production_upgrade_path:
+  - "Presigned URLs with expiration"
+  - "PostgreSQL for metadata"
+  - "MinIO for files"
+  - "Automated GC with configurable retention"
 ```
 
 ---
 
-## Итоговое решение
-
-**PostgreSQL + MinIO — правильный выбор потому что:**
-
-**PostgreSQL:**
-1. ✅ Battle-tested для structured data
-2. ✅ JSONB для гибкости
-3. ✅ Отличная производительность для аналитики
-4. ✅ ACID транзакции
-
-**MinIO:**
-1. ✅ S3-compatible (легко мигрировать на AWS S3)
-2. ✅ Self-hosted (контроль данных)
-3. ✅ Простой deployment
-4. ✅ Идеален для больших файлов
-
-**Разделение ответственности:**
-- PostgreSQL = metadata, состояния, метрики
-- MinIO = артефакты (тексты, файлы)
-
----
-
-**Статус:** 📝 ЧЕРНОВИК (требует проверки и утверждения)
-**Последнее обновление:** 2025-12-13
+**Статус:** ✅ УТВЕРЖДЕНО
+**Следующий шаг:** Реализация Storage Service
