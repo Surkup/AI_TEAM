@@ -7,28 +7,15 @@ Architecture (ORCHESTRATOR_SPEC_v2.1):
 - Transport Layer: MindBus/AMQP (agent communication)
 
 Key principle: LangGraph runs INSIDE Temporal Activity (not vice versa)
+
+IMPORTANT: This module is isolated from parent orchestrator package
+to avoid Temporal sandbox restrictions on datetime.utcnow.
 """
 
-from .workflows import ProcessCardWorkflow
-from .activities import (
-    parse_process_card,
-    execute_step,
-    run_planning_meeting,
-    run_quality_check,
-)
-from .worker import create_worker, run_worker
-from .client import TemporalClient
+# Only export what's needed - avoid importing from parent package
+from .config import TemporalConfig, DEFAULT_CONFIG
 
 __all__ = [
-    # Workflows
-    "ProcessCardWorkflow",
-    # Activities
-    "parse_process_card",
-    "execute_step",
-    "run_planning_meeting",
-    "run_quality_check",
-    # Infrastructure
-    "create_worker",
-    "run_worker",
-    "TemporalClient",
+    "TemporalConfig",
+    "DEFAULT_CONFIG",
 ]

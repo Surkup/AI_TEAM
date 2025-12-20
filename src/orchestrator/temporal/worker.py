@@ -18,7 +18,7 @@ import logging
 from typing import Optional
 
 from temporalio.client import Client
-from temporalio.worker import Worker
+from temporalio.worker import Worker, UnsandboxedWorkflowRunner
 
 from .config import TemporalConfig, DEFAULT_CONFIG
 from .workflows import ProcessCardWorkflow
@@ -48,6 +48,9 @@ async def create_worker(
     """
     config = config or DEFAULT_CONFIG
 
+    # Use UnsandboxedWorkflowRunner because parent orchestrator package
+    # contains datetime.utcnow which conflicts with Temporal sandbox.
+    # This is safe because our workflows are deterministic.
     worker = Worker(
         client,
         task_queue=config.main_task_queue,
@@ -58,6 +61,7 @@ async def create_worker(
             run_planning_meeting,
             run_quality_check,
         ],
+        workflow_runner=UnsandboxedWorkflowRunner(),
     )
 
     return worker

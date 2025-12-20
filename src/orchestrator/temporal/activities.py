@@ -45,30 +45,74 @@ async def _parse_process_card_impl(card_id: str) -> Dict[str, Any]:
     }
 
 
-async def _execute_step_impl(step: Dict[str, Any]) -> Dict[str, Any]:
+async def _execute_step_impl(
+    step: Dict[str, Any],
+    use_mindbus: bool = False,
+) -> Dict[str, Any]:
     """
     Pure implementation of execute_step.
 
     Args:
         step: Step definition with action, agent, params
+        use_mindbus: If True, send real command via MindBus
 
     Returns:
         Step execution result
     """
     step_id = step.get("id", "unknown")
     action = step.get("action", "unknown")
-    agent_id = step.get("agent_id")
+    agent_role = step.get("agent_id", "default-agent")
+    params = step.get("params", {})
 
-    # TODO: Integrate with MindBus
-    # For now, return mock result
-    return {
-        "step_id": step_id,
-        "action": action,
-        "agent_id": agent_id,
-        "status": "completed",
-        "output": f"Mock output for {action}",
-        "executed_at": datetime.utcnow().isoformat(),
-    }
+    if use_mindbus:
+        # Real MindBus integration
+        try:
+            from src.mindbus.core import MindBus
+
+            bus = MindBus()
+            bus.connect()
+
+            # Send command to agent
+            event_id = bus.send_command(
+                action=action,
+                params=params,
+                target=agent_role,
+                source="temporal-orchestrator",
+                subject=step_id,
+            )
+
+            # TODO: Wait for RESULT message (need async RPC pattern)
+            # For now, just send command and return success
+            bus.disconnect()
+
+            return {
+                "step_id": step_id,
+                "action": action,
+                "agent_id": agent_role,
+                "event_id": event_id,
+                "status": "sent",
+                "output": f"Command sent to {agent_role}",
+                "executed_at": datetime.utcnow().isoformat(),
+            }
+        except Exception as e:
+            return {
+                "step_id": step_id,
+                "action": action,
+                "agent_id": agent_role,
+                "status": "failed",
+                "error": str(e),
+                "executed_at": datetime.utcnow().isoformat(),
+            }
+    else:
+        # Mock mode for testing
+        return {
+            "step_id": step_id,
+            "action": action,
+            "agent_id": agent_role,
+            "status": "completed",
+            "output": f"Mock output for {action}",
+            "executed_at": datetime.utcnow().isoformat(),
+        }
 
 
 async def _run_planning_meeting_impl(card_content: Dict[str, Any]) -> Dict[str, Any]:
@@ -153,14 +197,18 @@ async def parse_process_card(card_id: str) -> Dict[str, Any]:
 
 
 @activity.defn
-async def execute_step(step: Dict[str, Any]) -> Dict[str, Any]:
+async def execute_step(step: Dict[str, Any], use_mindbus: bool = False) -> Dict[str, Any]:
     """
     Execute a single step via MindBus.
 
     Temporal wrapper with heartbeat support.
+
+    Args:
+        step: Step definition
+        use_mindbus: If True, send real command via MindBus
     """
     activity.heartbeat()
-    result = await _execute_step_impl(step)
+    result = await _execute_step_impl(step, use_mindbus=use_mindbus)
     activity.heartbeat()
     return result
 
