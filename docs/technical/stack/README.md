@@ -1,7 +1,8 @@
 # Технический стек AI_TEAM
 
 **Статус:** ✅ УТВЕРЖДЕНО
-**Последнее обновление:** 2025-12-15
+**Последнее обновление:** 2025-12-20
+**Версия:** 2.1 (Добавлен Orchestrator на базе Temporal + LangGraph)
 
 ---
 
@@ -20,10 +21,16 @@
                         │
     ┌───────────────────┼───────────────────┐
     │                   │                   │
-┌───▼────────┐  ┌──────▼───────┐  ┌───────▼────────┐
-│Orchestrator│  │Node Registry │  │    Storage     │
-│  (Custom)  │  │ (etcd/Consul)│  │  (PostgreSQL)  │
-└───┬────────┘  └──────────────┘  └────────────────┘
+┌───▼────────────────┐  ┌▼─────────────┐  ┌▼───────────────┐
+│    ORCHESTRATOR    │  │Node Registry │  │    Storage     │
+│ ┌────────────────┐ │  │ (etcd/Consul)│  │ (SQLite/MinIO) │
+│ │   Temporal     │ │  └──────────────┘  └────────────────┘
+│ │ (Durable Exec) │ │
+│ ├────────────────┤ │
+│ │   LangGraph    │ │
+│ │ (AI Planning)  │ │
+│ └────────────────┘ │
+└───┬────────────────┘
     │
     │ Commands/Results via MindBus (RabbitMQ + CloudEvents)
     │
@@ -49,6 +56,11 @@
 └─────────────────────────────────────────────────────┘
 ```
 
+**Ключевой принцип Orchestrator v2.1:**
+> LangGraph (AI-логика) работает ВНУТРИ Temporal Activity (надёжное выполнение)
+
+См: [ADR-001: Temporal + LangGraph](../../concepts/ADR-001_TEMPORAL_LANGGRAPH.md)
+
 ---
 
 ## Полный стек (Stack Overview)
@@ -60,12 +72,13 @@
 | **Node Management** | Node Passport + Node Registry (etcd/Consul) | Регистрация и поиск узлов по capabilities | [03_node_management.md](03_node_management.md) + [docs/SSOT/](../../SSOT/) |
 | **Интеграция с LLM** | LiteLLM | Вызовы AI-моделей | [04_llm_integration.md](04_llm_integration.md) |
 | **База данных & Хранилище** | SQLite + fsspec (MVP) → PostgreSQL + MinIO (Production) | Задачи, состояние, артефакты | [05_database_storage.md](05_database_storage.md) + [STORAGE_SPEC_v1.0.md](../../SSOT/STORAGE_SPEC_v1.0.md) |
-| **Process Cards** | YAML DSL (GitHub Actions-подобный) | Декларативное описание процессов | [06_process_cards.md](06_process_cards.md) + [docs/SSOT/PROCESS_CARD_SPEC_v1.0.md](../../SSOT/PROCESS_CARD_SPEC_v1.0.md) |
-| **API фреймворк** | FastAPI | HTTP API для пользователей | [07_api_framework.md](07_api_framework.md) |
-| **Мониторинг** | OpenTelemetry + Prometheus + Grafana | Наблюдаемость системы | [08_monitoring_observability.md](08_monitoring_observability.md) |
-| **Развертывание** | Docker Compose → Kubernetes | Запуск и масштабирование | [09_deployment.md](09_deployment.md) |
-| **Конфигурация** | YAML + Pydantic | Настройки системы | [10_configuration_management.md](10_configuration_management.md) |
-| **Тестирование** | pytest + Ruff + mypy | Качество кода | [11_testing_quality.md](11_testing_quality.md) |
+| **Orchestrator (Workflow Engine)** | **Temporal** (Execution) + **LangGraph** (Intelligence) | Durable execution, AI-планирование, subprocess | [06_orchestrator.md](06_orchestrator.md) + [ORCHESTRATOR_SPEC_v2.1](../../SSOT/ORCHESTRATOR_SPEC_v2.1.md) |
+| **Process Cards** | YAML DSL (GitHub Actions-подобный) | Декларативное описание процессов | [07_process_cards.md](07_process_cards.md) + [docs/SSOT/PROCESS_CARD_SPEC_v1.0.md](../../SSOT/PROCESS_CARD_SPEC_v1.0.md) |
+| **API фреймворк** | FastAPI | HTTP API для пользователей | [08_api_framework.md](08_api_framework.md) |
+| **Мониторинг** | OpenTelemetry + Prometheus + Grafana + Temporal UI | Наблюдаемость системы | [09_monitoring_observability.md](09_monitoring_observability.md) |
+| **Развертывание** | Docker Compose → Kubernetes | Запуск и масштабирование | [10_deployment.md](10_deployment.md) |
+| **Конфигурация** | YAML + Pydantic | Настройки системы | [11_configuration_management.md](11_configuration_management.md) |
+| **Тестирование** | pytest + Ruff + mypy | Качество кода | [12_testing_quality.md](12_testing_quality.md) |
 
 ---
 
@@ -103,7 +116,38 @@
 - ✅ Кеширование через Redis
 - 🔄 **Модульность**: Легко добавить новые модели
 
-### 6. Трёхуровневое хранилище — Ready-Made First
+### 6. Temporal + LangGraph — двухслойный Orchestrator (ADR-001)
+
+**Архитектурное решение**: [ADR-001](../../concepts/ADR-001_TEMPORAL_LANGGRAPH.md)
+
+**Два слоя:**
+
+| Слой | Технология | Назначение |
+|------|------------|------------|
+| **Execution Layer** | Temporal | Durable execution, event sourcing, retry, subprocess |
+| **Intelligence Layer** | LangGraph | AI-планирование, Meeting Protocol, Quality Loop |
+
+**Ключевой принцип:**
+```
+LangGraph ВНУТРИ Temporal Activity (не наоборот!)
+```
+
+**Что даёт Temporal:**
+- ✅ **Durable Execution** — workflow переживает рестарты
+- ✅ **Event History** — полный audit trail
+- ✅ **Child Workflows** — наши subprocesses
+- ✅ **Retry + Saga** — автоматические повторы и compensation
+
+**Что даёт LangGraph:**
+- ✅ **Meeting Protocol** — коллаборативное планирование агентов
+- ✅ **Quality Loop** — циклы улучшения качества
+- ✅ **Conflict Resolution** — разрешение конфликтов
+
+**Экономия**: ~15-21 неделя разработки (вместо custom state machine)
+
+См: [ORCHESTRATOR_SPEC_v2.1](../../SSOT/ORCHESTRATOR_SPEC_v2.1.md)
+
+### 7. Трёхуровневое хранилище — Ready-Made First
 - ✅ **Agent State**: LangGraph Checkpointer (0 строк своего кода)
 - ✅ **Process State**: SQLite + SQLAlchemy (MVP) → PostgreSQL (Production)
 - ✅ **Artifacts**: fsspec + SQLite (MVP) → MinIO + PostgreSQL (Production)
@@ -171,13 +215,19 @@ Python 3.11+
     ↓
 FastAPI (API gateway)
     ↓
-Orchestrator (custom) + Node Registry (etcd/Consul)
+┌──────────────────────────────────────┐
+│ Orchestrator v2.1                    │
+│   Temporal (durable execution)       │
+│   + LangGraph (AI planning) [Phase2] │
+└──────────────────────────────────────┘
+    ↓
+Node Registry (etcd/Consul)
     ↓
 MindBus (RabbitMQ + CloudEvents)
     ↓
 Nodes (Agents с Node Passport)
     ↓
-PostgreSQL (упрощенная схема: 1-2 таблицы)
+SQLite + fsspec (MVP storage)
     ↓
 LiteLLM (unified LLM interface)
     ↓
@@ -185,11 +235,15 @@ Docker Compose (контейнеры)
 ```
 
 **Минимальный стек:**
-- API, Orchestrator, RabbitMQ, PostgreSQL, etcd, Redis (для кеша LLM)
+- API, **Temporal Server**, RabbitMQ, SQLite, etcd, Redis (для кеша LLM)
 - Узлы (агенты) регистрируются в Node Registry
 - Process Cards описывают процессы
+- **Temporal UI** для мониторинга workflows
 - Логи с trace_id (базовый observability)
 - **Стоимость**: $0 (всё open source, работает на ноутбуке)
+
+**MVP Phase 1 (Temporal Core):** ProcessCardWorkflow + execute_step Activity
+**MVP Phase 2 (LangGraph):** collaborative_planning + quality_loop Activities
 
 ### Фаза 2: Ранние пользователи (1-3 месяца)
 ```
@@ -246,23 +300,47 @@ Docker Compose (контейнеры)
 
 **НО:** 🔄 LEGO-принцип позволяет заменить RabbitMQ на Redis Streams если требования изменятся
 
-### ❌ Отклонено: Temporal как замена MindBus
-**Почему НЕТ:**
-- Temporal = workflow engine, НЕ message bus
-- Разные задачи: MindBus для коммуникации, Temporal для orchestration
-- Можно использовать Temporal ДЛЯ оркестратора, но НЕ ВМЕСТО MindBus
+### ✅ ПРИНЯТО: Temporal для Orchestrator (ADR-001)
+
+**Статус**: ✅ УТВЕРЖДЕНО (2025-12-20)
+
+**Решение:** Использовать Temporal как Execution Layer для Orchestrator.
+
+**Важное уточнение:**
+- Temporal = **workflow engine для Orchestrator**, НЕ замена MindBus
+- MindBus = **message bus для агентов** (остаётся без изменений)
+- Разные задачи, работают вместе
+
+**Экономия:** 15-21 неделя разработки (вместо custom state machine)
+
+См: [ADR-001: Temporal + LangGraph](../../concepts/ADR-001_TEMPORAL_LANGGRAPH.md)
+
+### ✅ ПРИНЯТО: LangGraph для AI-логики Orchestrator (ADR-001)
+
+**Статус**: ✅ УТВЕРЖДЕНО (2025-12-20)
+
+**Что используем в Orchestrator:**
+- LangGraph для **Meeting Protocol** (коллаборативное планирование)
+- LangGraph для **Quality Loop** (циклы улучшения)
+- LangGraph для **Conflict Resolution** (разрешение конфликтов)
+
+**Ключевой принцип:**
+> LangGraph работает ВНУТРИ Temporal Activity (не наоборот!)
+
+**Что НЕ изменилось:**
+- ❌ LangGraph НЕ заменяет нашу архитектуру (Node Passport, MindBus, Registry)
+- ✅ LangGraph дополняет Orchestrator AI-логикой
 
 ### ❌ Отклонено: LangGraph/CrewAI как единственный СИСТЕМНЫЙ фреймворк
+
 **Почему НЕТ как замена архитектуре:**
 - Не совместимо с концепцией Node Passport + capability-based routing
-- Не заменяет MindBus, Registry, Orchestrator
+- Не заменяет MindBus, Registry, наши принципы
 - Мы используем свою архитектуру узлов с единым интерфейсом
 
-**НО:** ✅ Используем LangGraph ВНУТРИ агентов:
-- LangGraph для Agent Loop (ReAct паттерн)
-- CrewAI для командной работы агентов (опционально)
-- LiteLLM для LLM вызовов
-- См: [AGENT_ARCHITECTURE_draft.md](../../concepts/AGENT_ARCHITECTURE_draft.md)
+**НО:** ✅ Используем LangGraph В ДВУХ МЕСТАХ:
+1. **Внутри агентов** — для Agent Loop (ReAct паттерн)
+2. **Внутри Orchestrator** — для Meeting Protocol, Quality Loop (ADR-001)
 
 ---
 
@@ -310,4 +388,4 @@ Docker Compose (контейнеры)
 ---
 
 **Статус:** ✅ УТВЕРЖДЕНО
-**Последнее обновление**: 2025-12-19
+**Последнее обновление**: 2025-12-20

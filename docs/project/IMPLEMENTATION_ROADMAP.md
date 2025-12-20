@@ -1167,11 +1167,108 @@ tests/
 
 ---
 
+## 🔄 Этап 5.5: Orchestrator v2.1 (Temporal + LangGraph) — НОВЫЙ
+
+**Статус**: 📋 ПОДГОТОВКА (ADR принят, ТЗ написано)
+
+**Цель**: Перевести Orchestrator на production-ready архитектуру с Temporal + LangGraph
+
+**Предусловие**: ✅ ADR-001 принят, ORCHESTRATOR_SPEC_v2.1 создан
+
+### Архитектурное решение (ADR-001)
+
+| Слой | Технология | Назначение |
+|------|------------|------------|
+| **Execution Layer** | Temporal | Durable execution, event sourcing, recovery |
+| **Intelligence Layer** | LangGraph | AI-логика: planning, meetings, quality loop |
+| **Transport Layer** | MindBus (AMQP) | Коммуникация с агентами (без изменений) |
+
+**Ключевой принцип**:
+> LangGraph ВНУТРИ Temporal Activity, не наоборот
+
+**Экономия**: ~15-21 неделя разработки (вместо custom state machine)
+
+### Документы
+
+- [ADR-001: Temporal + LangGraph](../concepts/ADR-001_TEMPORAL_LANGGRAPH.md) — обоснование решения
+- [ORCHESTRATOR_SPEC_v2.1](../SSOT/ORCHESTRATOR_SPEC_v2.1.md) — техническое задание (SSOT)
+- [ORCHESTRATOR_WORLD_EXPERIENCE_RESEARCH](../concepts/archive/ORCHESTRATOR_WORLD_EXPERIENCE_RESEARCH.md) — исследование мирового опыта (архив)
+
+---
+
+### Phase 1: Temporal Core (2 недели)
+
+**Задача**: Базовая интеграция Temporal
+
+| Шаг | Описание | Время |
+|-----|----------|-------|
+| 5.5.1 | Установка Temporal (Docker Compose) | 2-3 ч |
+| 5.5.2 | ProcessCardWorkflow (основной workflow) | 8-10 ч |
+| 5.5.3 | execute_step Activity (MindBus интеграция) | 4-5 ч |
+| 5.5.4 | parse_process_card Activity | 2-3 ч |
+| 5.5.5 | Child Workflows для subprocesses | 4-5 ч |
+| 5.5.6 | Интеграция с Node Registry | 2-3 ч |
+| 5.5.7 | Тесты + E2E | 4-5 ч |
+
+**Результат**: Process Cards выполняются через Temporal
+
+---
+
+### Phase 2: LangGraph Intelligence (2 недели)
+
+**Задача**: Добавить AI-логику через LangGraph
+
+| Шаг | Описание | Время |
+|-----|----------|-------|
+| 5.5.8 | collaborative_planning Activity (Meeting Protocol) | 8-10 ч |
+| 5.5.9 | quality_loop Activity (Quality Check) | 6-8 ч |
+| 5.5.10 | Conflict Resolution (conditional routing) | 4-5 ч |
+| 5.5.11 | Тесты multi-agent scenarios | 4-5 ч |
+
+**Результат**: Orchestrator умеет планировать через совещания агентов
+
+---
+
+### Phase 3: Production Hardening (1 неделя)
+
+**Задача**: Подготовка к production
+
+| Шаг | Описание | Время |
+|-----|----------|-------|
+| 5.5.12 | Temporal UI настройка | 2-3 ч |
+| 5.5.13 | OpenTelemetry интеграция | 3-4 ч |
+| 5.5.14 | Prometheus метрики | 2-3 ч |
+| 5.5.15 | Документация + примеры | 4-5 ч |
+
+**Результат**: Production-ready Orchestrator
+
+---
+
+### Что меняется (Migration)
+
+| Компонент | Было (v1.0) | Стало (v2.1) |
+|-----------|-------------|--------------|
+| State Store | PostgreSQL (custom) | Temporal Event History |
+| Execution Engine | Custom State Machine | Temporal Workflow |
+| Retry Logic | Custom | Temporal Retry Policy |
+| Subprocess | Не было | Temporal Child Workflows |
+| Recovery | Custom | Temporal auto-replay |
+
+### Что НЕ меняется
+
+- ✅ MindBus (AMQP) — без изменений
+- ✅ CloudEvents — без изменений
+- ✅ MESSAGE_FORMAT v1.1 — без изменений
+- ✅ Process Card format — совместим (+ новые поля)
+- ✅ Node Passport / Registry — без изменений
+
+---
+
 ## 🎯 Текущий фокус
 
-**Сейчас мы на**: ✅ Этапы 1-5 ЗАВЕРШЕНЫ
+**Сейчас мы на**: ✅ Этапы 1-5 ЗАВЕРШЕНЫ, 📋 Этап 5.5 ПОДГОТОВЛЕН
 
-**Следующий шаг**: Этап 6 — Улучшенный Monitor (Web UI)
+**Следующий шаг**: Этап 5.5 Phase 1 — Temporal Core (установка + базовый workflow)
 
 **Что сделано (2025-12-19)**:
 - ✅ Этап 1: MindBus + Registry + Storage + Orchestrator MVP
@@ -1242,9 +1339,12 @@ print(f"Artifact: {manifest.id}, URI: {manifest.uri}")
 | [AGENT_HUMAN_NAMES_v0.1](../concepts/drafts/AGENT_HUMAN_NAMES_v0.1.md) | Этап 4, 6 | Display Identity через Монитор |
 | [CONTEXT_MEMORY_ARCHITECTURE_v1.2](../concepts/drafts/CONTEXT_MEMORY_ARCHITECTURE_v1.2.md) | Этап 5, 9 | Memory Namespaces, Canon, Context Pack, Memory Curator |
 | [STORAGE_MEMORY_REVIEW_v1.0](../concepts/drafts/STORAGE_MEMORY_REVIEW_v1.0.md) | Этап 5, 9 | Storage vs Memory разграничение, 12-пунктов чеклист |
+| [ORCHESTRATOR_SPEC_v2.1](../SSOT/ORCHESTRATOR_SPEC_v2.1.md) | Этап 5.5 | Temporal + LangGraph архитектура (SSOT) |
+| [ADR-001_TEMPORAL_LANGGRAPH](../concepts/ADR-001_TEMPORAL_LANGGRAPH.md) | Этап 5.5 | Обоснование выбора технологий |
+| [ORCHESTRATOR_WORLD_EXPERIENCE_RESEARCH](../concepts/archive/ORCHESTRATOR_WORLD_EXPERIENCE_RESEARCH.md) | Этап 5.5 | Исследование мирового опыта (архив) |
 
 ---
 
-**Последнее обновление**: 2025-12-19
+**Последнее обновление**: 2025-12-20
 
-**Версия**: 2.4 (Этап 5 Storage полностью реализован — SQLite + fsspec, 49 тестов)
+**Версия**: 2.5 (Добавлен Этап 5.5 — Orchestrator v2.1 на базе Temporal + LangGraph)
