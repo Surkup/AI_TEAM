@@ -32,3 +32,5 @@ langgraph==1.0.5
 # Ready-Made First: Storage (Этап 5 - STORAGE_SPEC_v1.1)
 sqlalchemy>=2.0.0
 fsspec>=2024.0.0
+# Ready-Made First: Orchestrator (Этап 5.5 - ORCHESTRATOR_SPEC_v2.1)
+temporalio>=1.7.0

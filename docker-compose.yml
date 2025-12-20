@@ -1,0 +1,96 @@
+# AI_TEAM Infrastructure
+# Temporal Server + Dependencies
+#
+# Usage:
+#   docker-compose up -d          # Start all services
+#   docker-compose logs -f        # View logs
+#   docker-compose down           # Stop all services
+#
+# Temporal UI: http://localhost:8080
+# Temporal gRPC: localhost:7233
+
+version: "3.8"
+
+services:
+  # PostgreSQL for Temporal persistence
+  postgresql:
+    image: postgres:15-alpine
+    container_name: ai_team_postgres
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai_team_network
+
+  # Temporal Server
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    container_name: ai_team_temporal
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development.yaml
+    ports:
+      - "7233:7233"  # gRPC frontend
+    volumes:
+      - ./config/temporal:/etc/temporal/config/dynamicconfig
+    networks:
+      - ai_team_network
+
+  # Temporal Web UI
+  temporal-ui:
+    image: temporalio/ui:2.31.2
+    container_name: ai_team_temporal_ui
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    ports:
+      - "8080:8080"
+    networks:
+      - ai_team_network
+
+  # RabbitMQ for MindBus (if needed for local dev)
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: ai_team_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ai_team
+      RABBITMQ_DEFAULT_PASS: ai_team_secret
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai_team_network
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+
+networks:
+  ai_team_network:
+    driver: bridge
